@@ -1,0 +1,14 @@
+{
+  "dependencies": {
+    "bignumber.js": "^9.0.0",
+    "eth-saddle": "0.1.9",
+    "jest": "^24.9.0",
+    "ts-node": "^8.6.2"
+  },
+  "scripts": {
+    "t": "npx saddle test",
+    "test": "npx saddle compile && npx saddle test",
+    "compile": "npx saddle compile"
+  },
+  "license": "ISC"
+}
