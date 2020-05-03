@@ -5,8 +5,6 @@ const util = require("util");
 const sendCall = async (sendable, opts = {}) => {
 	const returnValue = await call(sendable, opts);
 	const res = await send(sendable, opts);
-	// const util = require('util')
-	// console.log(util.inspect(res, false, null, true /* enable colors */))
 	return returnValue;
 };
 
@@ -16,16 +14,18 @@ const bn = num => {
 	return ethers.utils.bigNumberify(new BigNumber(num).toFixed());
 };
 
-const futureTime = bn(1893492061); // 2030
-
 const prep = async (spender, amount, token, who) => {
-	await send(token.methods.allocateTo(who, amount));
-	await send(token.methods.approve(spender, amount), { from: who });
+	await send(token, "allocateTo", [who, amount]);
+	await send(token, "approve", [spender, amount], { from: who });
 };
+
+const mantissa = num => {
+  return ethers.utils.bigNumberify(new BigNumber(num).times(1e18).toFixed());
+}
 
 module.exports = {
 	bn,
-	futureTime,
 	sendCall,
-	prep
+	prep,
+	mantissa
 };

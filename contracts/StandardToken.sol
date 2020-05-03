@@ -100,7 +100,7 @@ contract StandardToken is ERC20, BasicToken {
         public
         returns (bool)
     {
-        require(_to != address(0));
+        require(_to != address(0), "TransferFrom: Can't send to address zero");
         require(_value <= balances[_from], "TransferFrom: Inadequate balance");
         require(_value <= allowed[_from][msg.sender], "TransferFrom: Inadequate allowance");
 

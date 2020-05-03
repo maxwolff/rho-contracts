@@ -1,43 +1,48 @@
-const BigNumber = require("bignumber.js");
+const BigNumber = require('bignumber.js');
+const { bn, mantissa } = require('./Helpers');
+
+// let saddleSend = send;
+// // log input, for testing
+// send = (a, b, c, d) => {
+//   console.log(b);
+//   saddleSend(a, b, c, d);
+// };
+
+const msg = (actual, expected) => {
+  return `Expected: ${JSON.stringify(expected)}, \n Actual: ${JSON.stringify(actual)}}`;
+}
 
 expect.extend({
-  toEqual(actual, expected) {
+  // untested
+  toEqualNumber(expected, actual) {
     return {
-      pass: actual.toString() == expected.toString(),
-      message: () =>
-        `expected ${JSON.stringify(
-          actual
-        )} (${actual.toString()}) == ${JSON.stringify(
-          expected
-        )} (${expected.toString()})`
+      pass: bn(actual).eq(bn(expected)),
+      message: () => msg(expected, expected),
     };
-  }
-});
+  },
 
-expect.extend({
-  toRevert(actual, msg = "revert") {
+  toRevert(trx, msg = 'revert') {
     return {
-      pass:
-        !!actual["message"] &&
-        actual.message === `VM Exception while processing transaction: ${msg}`,
-      message: () => `expected revert, got: ${JSON.stringify(actual)}`
-    };
-  }
-});
+      pass: !!trx.message && trx.message === `VM Exception while processing transaction: revert ${msg}`,
+      message: () => {
+        if (trx.message) {
+          return `expected VM Exception while processing transaction: ${msg}, got ${trx.message}`
+        } else {
+          return `expected revert, but transaction succeeded: ${JSON.stringify(trx)}`
+        }
+      }
+    }
+  },
 
-expect.extend({
-  toAlmostEqual(actual, expected, precision) {
+
+  toAlmostEqual(expected, actual, precision) {
     const actualBig = new BigNumber(actual.toString()).toPrecision(precision);
     const expectedBig = new BigNumber(expected.toString()).toPrecision(
       precision
     );
-    if (actualBig === expectedBig) {
-      return { pass: true };
-    } else {
-      return {
-        pass: false,
-        message: () => `Expected ${actualBig} to equal ${expectedBig}`
-      };
-    }
-  }
+    return {
+      pass: actualBig === expectedBig,
+      message: () => msg(expectedBig, actualBig),
+    };
+  },
 });

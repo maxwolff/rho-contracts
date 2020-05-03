@@ -1,8 +1,11 @@
 module.exports = {
-  solc: "solc",                                         // Solc command to run
-  solc_args: [],                                        // Extra solc args
-  build_dir: ".build",                                  // Directory to place built contracts
-  contracts: "contracts/*.sol",                         // Glob to match contract files
+  // solc: "solc",                                         // Solc command to run
+  solc_args: [                                              // Extra solc args
+    '--allow-paths','contracts',
+    '--evm-version', 'istanbul'
+  ],                                       // Extra solc args
+  // build_dir: ".build",                                  // Directory to place built contracts
+  contracts: "contracts/*.sol",   // Glob to match contract files
   tests: ['**/tests/*Test.ts'],                            // Glob to match test files
   networks: {                                           // Define configuration for each network
     development: {
