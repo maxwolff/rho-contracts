@@ -8,16 +8,17 @@ const { bn, mantissa } = require('./Helpers');
 //   saddleSend(a, b, c, d);
 // };
 
-const msg = (actual, expected) => {
-  return `Expected: ${JSON.stringify(expected)}, \n Actual: ${JSON.stringify(actual)}}`;
+const msg = (expected, actual) => {
+  return `Expected: ${JSON.stringify(expected.toString())}, \n Actual: ${JSON.stringify(actual.toString())}}`;
 }
 
+let i = 0;
+
 expect.extend({
-  // untested
-  toEqualNumber(expected, actual) {
+  toEqNum(expected, actual) {
     return {
       pass: bn(actual).eq(bn(expected)),
-      message: () => msg(expected, expected),
+      message: () => msg(expected, actual),
     };
   },
 
@@ -34,15 +35,14 @@ expect.extend({
     }
   },
 
-
   toAlmostEqual(expected, actual, precision) {
-    const actualBig = new BigNumber(actual.toString()).toPrecision(precision);
-    const expectedBig = new BigNumber(expected.toString()).toPrecision(
+    const bnActual = new BigNumber(actual.toString()).toPrecision(precision);
+    const bnExpected = new BigNumber(expected.toString()).toPrecision(
       precision
     );
     return {
-      pass: actualBig === expectedBig,
-      message: () => msg(expectedBig, actualBig),
+      pass: bnActual === bnExpected,
+      message: () => msg(bnExpected, bnActual),
     };
   },
 });

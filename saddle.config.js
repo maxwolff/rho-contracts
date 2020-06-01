@@ -1,3 +1,4 @@
+
 module.exports = {
   // solc: "solc",                                         // Solc command to run
   solc_args: [                                              // Extra solc args
@@ -5,7 +6,16 @@ module.exports = {
     '--evm-version', 'istanbul'
   ],                                       // Extra solc args
   // build_dir: ".build",                                  // Directory to place built contracts
-  contracts: "contracts/*.sol",   // Glob to match contract files
+  contracts: "{contracts,contracts/**,contracts/test}/*.sol",   // Glob to match contract files
+  solc_shell_args: {                                        // Args passed to `exec`, see:
+    maxBuffer: 1024 * 500000,                               // https://nodejs.org/api/child_process.html#child_process_child_process_spawn_command_args_options
+    shell: process.env['SADDLE_SHELL'] || '/bin/bash'
+  },
+  // build_dir: ".build",                                   // Directory to place built contracts
+  extra_build_files: ['remote/*.json'],                     // Additional build files to deep merge
+  // coverage_dir: "coverage",                              // Directory to place coverage files
+  // coverage_ignore: [],                                   // List of files to ignore for coverage
+  trace: false,
   tests: ['**/tests/*Test.ts'],                            // Glob to match test files
   networks: {                                           // Define configuration for each network
     development: {

@@ -1,8 +1,6 @@
 pragma solidity ^0.5.12;
 
-contract BenchmarkInterface {
-	uint public borrowIndex;
-}
+import "../Rho.sol";
 
 contract MockCToken is BenchmarkInterface {
 

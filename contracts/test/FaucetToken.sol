@@ -1,7 +1,7 @@
 pragma solidity ^0.5.12;
 
-import "./SafeMath.sol";
-import "./StandardToken.sol";
+import "../SafeMath.sol";
+import "../StandardToken.sol";
 
 contract FaucetToken is StandardToken {
     string public name;

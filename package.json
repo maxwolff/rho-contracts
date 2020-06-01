@@ -1,14 +1,15 @@
 {
   "dependencies": {
     "bignumber.js": "^9.0.0",
-    "eth-saddle": "0.1.10",
-    "jest": "^24.9.0",
-    "ts-node": "^8.6.2"
+    "eth-saddle": "0.1.17"
   },
   "scripts": {
     "t": "npx saddle test",
-    "test": "npx saddle compile && npx saddle test",
+    "test": "npx saddle compile && yarn t",
     "compile": "npx saddle compile"
+  },
+  "resolutions": {
+    "scrypt.js": "https://registry.npmjs.org/@compound-finance/ethereumjs-wallet/-/ethereumjs-wallet-0.6.3.tgz"
   },
   "license": "ISC"
 }
