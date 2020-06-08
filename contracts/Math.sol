@@ -91,4 +91,13 @@ contract Math {
         require(b > 0, errorMessage);
         return a / b;
     }
+
+    function _min(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
+        return a.mantissa < b.mantissa ? a : b;
+    }
+
+    function _max(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
+        return a.mantissa > b.mantissa ? a : b;
+    }
+
 }

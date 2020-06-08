@@ -16,7 +16,7 @@ contract MockRho is Rho {
 		blockNumber = blockNumber_;
 	}
 
-	function getBlockNumber() public returns (uint) {
+	function getBlockNumber() public view returns (uint) {
 		return blockNumber;
 	}
 
