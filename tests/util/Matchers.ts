@@ -1,11 +1,17 @@
 const BigNumber = require('bignumber.js');
 const { bn, mantissa } = require('./Helpers');
+let assert = require('assert');
 
-// let saddleSend = send;
+// let saddleSend = deploy;
 // // log input, for testing
-// send = (a, b, c, d) => {
-//   console.log(b);
-//   saddleSend(a, b, c, d);
+// deploy = async (a, b, c, d) => {
+//   try {
+//     let f = await saddleSend(a, b, c, d);
+//     assert(!!f, 'why undefined');
+//     console.log(a,b);
+//   } catch(e) {
+//     throw e
+//   };
 // };
 
 const msg = (expected, actual) => {

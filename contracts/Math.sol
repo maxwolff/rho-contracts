@@ -10,12 +10,12 @@ contract Math {
 
 	/* always returns type of left side param */
 
-    function _newExp(uint num) pure internal returns (Exp memory) {
+    function _exp(uint num) pure internal returns (Exp memory) {
     	return Exp({mantissa: num});
     }
 
-    function _scaleToExp(uint num) pure internal returns (Exp memory) {
-        return Exp({mantissa: _mul(EXP_SCALE, num)});
+    function _oneExp() pure internal returns (Exp memory) {
+        return Exp({mantissa: EXP_SCALE});
     }
 
     function _add(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
@@ -23,12 +23,8 @@ contract Math {
     }
 
     function _add(uint a, uint b) pure internal returns (uint) {
-        return _add(a, b, "addition overflow");
-    }
-
-    function _add(uint a, uint b, string memory errorMessage) pure internal returns (uint) {
         uint c = a + b;
-        require(c >= a, errorMessage);
+        require(c >= a, "addition overflow");
         return c;
     }
 
@@ -37,12 +33,25 @@ contract Math {
     }
 
     function _sub(uint a, uint b) pure internal returns (uint) {
-        return _sub(a, b, "subtraction underflow");
+        require(b <= a, "subtraction underflow");
+        return a - b;
     }
 
-    function _sub(uint a, uint b, string memory errorMessage) pure internal returns (uint) {
-        require(b <= a, errorMessage);
-        return a - b;
+    // unaudited
+    function _sub(int a, uint b) pure internal returns (int) {
+        int c = a - int(b);
+        require(a >= c, "int - uint underflow");
+        return c;
+    }
+
+    function _add(int a, uint b) pure internal returns (int) {
+        int c = a + int(b);
+        require(a <= c, "int + uint overflow");
+        return c;
+    }
+
+    function _toUint(int a) pure internal returns (uint) {
+        return a < 0 ? uint(0) : uint(a);
     }
 
     function _mul(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
@@ -57,17 +66,12 @@ contract Math {
         return _mul(a, b.mantissa) / EXP_SCALE;
     }
 
-
     function _mul(uint a, uint b) pure internal returns (uint) {
-        return _mul(a, b, "multiplication overflow");
-    }
-
-    function _mul(uint a, uint b, string memory errorMessage) pure internal returns (uint) {
         if (a == 0 || b == 0) {
             return 0;
         }
         uint c = a * b;
-        require(c / a == b, errorMessage);
+        require(c / a == b, "multiplication overflow");
         return c;
     }
 
@@ -84,11 +88,7 @@ contract Math {
     }
 
     function _div(uint a, uint b) pure internal returns (uint) {
-        return _div(a, b, "divide by zero");
-    }
-
-    function _div(uint a, uint b, string memory errorMessage) pure internal returns (uint) {
-        require(b > 0, errorMessage);
+        require(b > 0, "divide by zero");
         return a / b;
     }
 

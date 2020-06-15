@@ -9,8 +9,14 @@ contract MockCToken is BenchmarkInterface {
 	function setBorrowIndex(uint borrowIndex_) public {
 		borrowIndex = borrowIndex_;
 	}
+
+	function getBorrowIndex() public view returns (uint) {
+		return borrowIndex;
+	}
 }
 
 contract BadBenchmark is BenchmarkInterface {
-	uint public borrowIndex = 0;
+	function getBorrowIndex() public view returns (uint) {
+		return 0;
+	}
 }

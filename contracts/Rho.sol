@@ -6,8 +6,8 @@ import "./SafeMath.sol";
 import "./InterestRateModel.sol";
 import "./Math.sol";
 
-contract BenchmarkInterface {
-	uint public borrowIndex;
+interface BenchmarkInterface {
+	function getBorrowIndex() external view returns (uint);
 }
 
 contract Rho is Math {
@@ -16,40 +16,39 @@ contract Rho is Math {
 	IERC20 public underlying;
 	BenchmarkInterface public benchmark;
 
-	uint public benchmarkIndexStored;
+	uint public constant swapMinDuration = 345600;// 60 days in blocks, assuming 15s blocks
+
 	uint public lastAccrualBlock;
+	uint public benchmarkIndexStored;
 
-	// ** Fixed rate accounting **
-	uint public fixedNotionalReceiving;
-	uint public fixedNotionalPaying;
+	/* notional size of each leg */
+	uint public notionalReceivingFixed;
+	uint public notionalPayingFloat;
 
-	uint public fixedToReceive;
-	uint public fixedToPay;
+	uint public notionalPayingFixed;
+	uint public notionalReceivingFloat;
+
+	/* Measure of outstanding swap obligations. 1 Unit = 1e18 notional * 1 block. Used to calculate collateral requirements */
+	int public parBlocksReceivingFixed;
+	int public parBlocksPayingFixed;
+
+	/* Fixed / float interest rates used in collateral calculations */
 
 	uint public avgFixedRateReceivingMantissa;
 	uint public avgFixedRatePayingMantissa;
 
-	// ** Float rate accounting **
-	uint public floatNotionalPaying;
-	uint public floatNotionalReceiving;
-
-	uint public parBlocksReceivingFloat;
-	uint public parBlocksPayingFloat;
-
-	// ** Protocol accounting **
-	uint public supplyIndex;
-	uint public totalLiquidity;
-
-	//XXX decide for sure. 60 days in blocks, assuming 15s blocks
-	uint public swapMinDuration = 345600;
+	/* Float rate bounds used in collateral calculations */
 	uint public maxFloatRateMantissa;
 	uint public minFloatRateMantissa;
+
+	/* Protocol PnL */
+	uint public supplyIndex;
+	uint public totalLiquidity;
 
 	mapping(address => SupplyAccount) public accounts;
 	mapping(bytes32 => bool) public payFixedSwaps;
 
-
-	event Test(uint a, uint b);
+	event Test(uint a, uint b, uint c);
 	event Accrue(uint totalLiquidityNew, uint lockedCollateralNew);
 
 	event OpenPayFixedSwap(
@@ -86,7 +85,7 @@ contract Rho is Math {
 		minFloatRateMantissa = minFloatRateMantissa_;
 		maxFloatRateMantissa = maxFloatRateMantissa_;
 
-		supplyIndex = EXP_SCALE;
+		supplyIndex = _oneExp().mantissa;
 
 		benchmarkIndexStored = getBenchmarkIndex();
 	}
@@ -119,40 +118,31 @@ contract Rho is Math {
 	// add owner as a param?
 
 
-	struct OpenPayFixedLocalVars {
-		Exp avgFixedRateReceivingNew;
-		uint fixedNotionalReceivingNew;
-		uint fixedToReceiveNew;
-		uint parBlocksPayingFloatNew;
-		uint floatNotionalPayingNew;
-	}
-
-	function openPayFixedSwap(uint notionalAmount) public returns (bytes32) {
+	function openPayFixedSwap(uint notionalAmount) public returns (bytes32 swapHash) {
 		uint lockedCollateral = accrue();
-		Exp memory swapFixedRate = _newExp(interestRateModel.getRatePayFixed(notionalAmount));
-
-		OpenPayFixedLocalVars memory vars;
+		Exp memory swapFixedRate = _exp(interestRateModel.getRatePayFixed(notionalAmount));
 
 		// protocol is receiving fixed, if user is paying fixed
 		uint lockedCollateralHypothetical = _add(lockedCollateral, getReceiveFixedInitCollateral(swapFixedRate, notionalAmount));
 
 		require(lockedCollateralHypothetical <= totalLiquidity, "Insufficient protocol collateral");
 
-		vars.fixedNotionalReceivingNew = _add(fixedNotionalReceiving, notionalAmount);
-		vars.floatNotionalPayingNew = _add(floatNotionalPaying, notionalAmount);
+		uint notionalReceivingFixedNew = _add(notionalReceivingFixed, notionalAmount);
+		uint notionalPayingFloatNew = _add(notionalPayingFloat, notionalAmount);
 
-		// += notionalAmount * swapFixedRate * swapMinDuration
-		vars.fixedToReceiveNew = _add(fixedToReceive, _mul(_mul(swapMinDuration, notionalAmount), swapFixedRate));
-		vars.parBlocksPayingFloatNew = _add(parBlocksPayingFloat, _mul(notionalAmount, swapMinDuration));
+		int parBlocksReceivingFixedNew = _add(parBlocksReceivingFixed, _mul(swapMinDuration, notionalAmount));
 
-		// = (avgFixedRateReceiving * fixedNotionalReceiving + notionalAmount * swapFixedRate) / (fixedNotionalReceiving + notionalAmount);
-		Exp memory fixedReceivingPerBlock = _mul(_newExp(avgFixedRateReceivingMantissa), fixedNotionalReceiving);
-		Exp memory orderFixedToReceivePerBlock = _mul(swapFixedRate, notionalAmount);
-		vars.avgFixedRateReceivingNew = _div(_add(fixedReceivingPerBlock, orderFixedToReceivePerBlock), vars.fixedNotionalReceivingNew);
+		/* avgFixedRateReceivingNew = (avgFixedRateReceiving * notionalReceivingFixed + notionalAmount * swapFixedRate) / (notionalReceivingFixed + notionalAmount);*/
+		Exp memory avgFixedRateReceivingNew;
+		{
+			Exp memory priorFixedReceivingRate= _mul(_exp(avgFixedRateReceivingMantissa), notionalReceivingFixed);
+			Exp memory orderFixedReceivingRate = _mul(swapFixedRate, notionalAmount);
+			avgFixedRateReceivingNew = _div(_add(priorFixedReceivingRate, orderFixedReceivingRate), notionalReceivingFixedNew);
+		}
 
 		uint userCollateral = getPayFixedInitCollateral(swapFixedRate, notionalAmount);
 
-		bytes32 swapHash = keccak256(abi.encode(
+		swapHash = keccak256(abi.encode(
 			benchmarkIndexStored,
 			getBlockNumber(),
 			swapFixedRate.mantissa,
@@ -176,12 +166,11 @@ contract Rho is Math {
 			msg.sender
 		);
 
-		avgFixedRateReceivingMantissa = vars.avgFixedRateReceivingNew.mantissa;
-		fixedNotionalReceiving = vars.fixedNotionalReceivingNew;
-		fixedToReceive = vars.fixedToReceiveNew;
+		avgFixedRateReceivingMantissa = avgFixedRateReceivingNew.mantissa;
+		notionalReceivingFixed = notionalReceivingFixedNew;
+		parBlocksReceivingFixed = parBlocksReceivingFixedNew;
 
-		parBlocksPayingFloat = vars.parBlocksPayingFloatNew;
-		floatNotionalPaying = vars.floatNotionalPayingNew;
+		notionalPayingFloat = notionalPayingFloatNew;
 
 		// require true?
 		underlying.transferFrom(msg.sender, address(this), userCollateral);
@@ -192,26 +181,23 @@ contract Rho is Math {
 	// }
 
 	struct ClosePayFixedLocalVars {
-		uint fixedNotionalReceivingNew;
-		uint fixedToReceiveNew;
-		Exp avgFixedRateReceivingNew;
-		uint floatNotionalPayingNew;
-		uint parBlocksPayingFloatNew;
+		Exp actualFloatRate;
+		uint swapFixedRateMantissa;
 	}
 
 	function closePayFixedSwap(
 		uint benchmarkInitIndex,
 		uint initBlock,
 		uint swapFixedRateMantissa,
-		uint priorMaxFloatRateMantissa,
 		uint notionalAmount,
+		uint priorMaxFloatRateMantissa,
 		uint userCollateral,
 		address owner
 	) public {
-		// dont accrue if delta blocks == 0?
-		emit Test(getBlockNumber(), initBlock);
 		accrue();
-		return;
+
+		ClosePayFixedLocalVars memory vars;
+		vars.swapFixedRateMantissa = swapFixedRateMantissa;
 		bytes32 swapHash = keccak256(abi.encode(
 			benchmarkInitIndex,
 			initBlock,
@@ -221,38 +207,35 @@ contract Rho is Math {
 			userCollateral,
 			owner
 		));
-		require(payFixedSwaps[swapHash] == true, "No active swap found");
 		uint swapDuration = _sub(getBlockNumber(), initBlock);
 		require(swapDuration >= swapMinDuration, "Premature close swap");
-		Exp memory actualFloatRate = _div(_newExp(benchmarkIndexStored), _newExp(benchmarkInitIndex));
 
-		ClosePayFixedLocalVars memory vars;
+		require(payFixedSwaps[swapHash] == true, "No active swap found");
 
-		/* fixedNotionalReceiving -= notionalAmount
-		 * floatNotionalPaying -= notionalAmount * actualFloatRate // undo compounding
-		 * avgFixedRateReceiving = avgFixedRateReceiving * fixedNotionalReceiving - swapFixedRateMantissa * notionalAmount / fixedNotionalReceivingNew
-		 */
+		vars.actualFloatRate = _div(_exp(benchmarkIndexStored), _exp(benchmarkInitIndex));
 
-		vars.fixedNotionalReceivingNew = _sub(fixedNotionalReceiving, notionalAmount);
-		vars.floatNotionalPayingNew = _sub(floatNotionalPaying, _mul(notionalAmount, actualFloatRate));
+		uint notionalReceivingFixedNew = _sub(notionalReceivingFixed, notionalAmount);
+		uint notionalPayingFloatNew = _sub(notionalPayingFloat, _mul(notionalAmount, vars.actualFloatRate));
 
-		if (vars.fixedNotionalReceivingNew != 0 ){
-			Exp memory numerator = _sub(_mul(_newExp(avgFixedRateReceivingMantissa), fixedNotionalReceiving), _mul(_newExp(swapFixedRateMantissa), notionalAmount));
-			vars.avgFixedRateReceivingNew = _div(numerator, vars.fixedNotionalReceivingNew);
+		/* avgFixedRateReceiving = avgFixedRateReceiving * notionalReceivingFixed - swapFixedRateMantissa * notionalAmount / notionalReceivingFixedNew */
+		Exp memory avgFixedRateReceivingNew;
+		if (notionalReceivingFixedNew != 0 ){
+			Exp memory numerator = _sub(_mul(_exp(avgFixedRateReceivingMantissa), notionalReceivingFixed), _mul(_exp(vars.swapFixedRateMantissa), notionalAmount));
+			avgFixedRateReceivingNew = _div(numerator, notionalReceivingFixedNew);
 		} else {
-			vars.avgFixedRateReceivingNew = _newExp(0);
+			avgFixedRateReceivingNew = _exp(0);
 		}
-
 
 		/* Late blocks adjustments. The protocol reserved enough collateral for this swap for ${swapDuration}, but its has been ${swapDuration + lateBlocks}.
 		 * We have consistently decreased the lockedCollateral from the `open` fn in every `accrue`, and in fact we have decreased it by more than we ever added in the first place.
-		 * 		parBlocksPayingFloat += notionalAmount * lateBlocks
-		 * 		fixedToReceive += notionalAmount * lateBlocks * swapFixedRate
 		 */
 
-		uint lateBlocks = _sub(swapDuration, swapMinDuration);
-		vars.fixedToReceiveNew = _add(fixedToReceive, _mul(_mul(notionalAmount, lateBlocks), _newExp(swapFixedRateMantissa)));
-		vars.parBlocksPayingFloatNew = _add(parBlocksPayingFloat, _mul(notionalAmount, lateBlocks));
+
+		int parBlocksReceivingFixedNew;
+		{
+			uint lateBlocks = _sub(swapDuration, swapMinDuration);
+			parBlocksReceivingFixedNew = _add(parBlocksReceivingFixed, _mul(notionalAmount, lateBlocks));
+		}
 
 		/* Calculate the user's payout:
 		 * 		fixedLeg = notionalAmount * swapDuration * swapFixedRate
@@ -260,142 +243,97 @@ contract Rho is Math {
 		 * 		userPayout = userCollateral + fixedLeg - floatLeg
 		 */
 
-		uint fixedLeg = _mul(_mul(notionalAmount, swapDuration), _newExp(swapFixedRateMantissa));
-		Exp memory effectiveFloatRate = _min(actualFloatRate, _newExp(priorMaxFloatRateMantissa));
-		uint floatLeg = _mul(notionalAmount, effectiveFloatRate);
-		uint userPayout = _sub(_add(userCollateral, floatLeg), fixedLeg);
+		 /// ***** TODO: max the user payout. Potentially using max float rate.
+		uint userPayout;
+		{
+			uint fixedLeg = _mul(_mul(notionalAmount, swapDuration), _exp(vars.swapFixedRateMantissa));
+			uint floatLeg = _mul(notionalAmount,_sub(vars.actualFloatRate, _oneExp()));
+			userPayout = _sub(_add(userCollateral, floatLeg), fixedLeg);
+		}
 
-
-		// Apply effects and interactions
+		/* Apply effects and interactions */
 
 		payFixedSwaps[swapHash] = false;
-		fixedNotionalReceiving = vars.fixedNotionalReceivingNew;
-		fixedToReceive = vars.fixedToReceiveNew;
-		avgFixedRateReceivingMantissa = vars.avgFixedRateReceivingNew.mantissa;
-		floatNotionalPaying = vars.floatNotionalPayingNew;
-		parBlocksPayingFloat = vars.parBlocksPayingFloatNew;
+
+		notionalReceivingFixed = notionalReceivingFixedNew;
+		notionalPayingFloat = notionalPayingFloatNew;
+
+		parBlocksReceivingFixed = parBlocksReceivingFixedNew;
+		avgFixedRateReceivingMantissa = avgFixedRateReceivingNew.mantissa;
 
 		underlying.transfer(owner, userPayout);
 	}
 
-	struct AccrueLocalVars {
-		uint totalLiquidityNew;
-		uint supplyIndexNew;
-		Exp benchmarkIndexNew;
-	}
-
-
-	 // function accrueApply() public returns {
-	 // 	uint lockedCollat, int editable ...,  = accrue();
-	 // 	editable = uint(editable)
-	 // 	apply
-	 // }
-
-	// function accrueClosePayFixed() public returns {
-	//  	uint lockedCollat, int editable ...,  = accrue();
-	//  	retur neditable4
-	//  	applySome
-	//  	return some.
-
-
-
 	function accrue() internal returns (uint lockedCollateralNew) {
-		AccrueLocalVars memory vars;
 		uint accruedBlocks = getBlockNumber() - lastAccrualBlock;
 
-		vars.benchmarkIndexNew = _newExp(getBenchmarkIndex());
-		Exp memory benchmarkIndexRatio = _div(vars.benchmarkIndexNew, _newExp(benchmarkIndexStored));
-		require(benchmarkIndexRatio.mantissa >= _scaleToExp(1).mantissa, "Decreasing float rate");
+		/* Calculate protocol fixed rate credit/debt. Use int to keep negatives, for correct late blocks calc even after underflow */
+		int parBlocksReceivingFixedNew = _sub(parBlocksReceivingFixed, _mul(accruedBlocks, notionalReceivingFixed));
+		int parBlocksPayingFixedNew = _sub(parBlocksPayingFixed, _mul(accruedBlocks, notionalPayingFixed));
 
-		/* CALCULATE PROTOCOL FLOAT RATE CREDIT/DEBT
-		 * 		floatPaid = floatNotionalPaying * (benchmarkIndexRatio - 1)
-		 * 		floatReceived = floatNotionalReceiving  * (benchmarkIndexRatio - 1)
-		 * 		parBlocksReceivingFloat += fixedNotionalPaying * accruedBlocks
-		 * 		parBlocksPayingFloat += fixedNotionalReceiving * accruedBlocks
-		 * 		floatNotionalPaying *= benchmarkIndexRatio
-		 * 		floatNotionalReceiving *= benchmarkIndexRatio
-		 */
+		lockedCollateralNew = getLockedCollateral(parBlocksPayingFixedNew, parBlocksReceivingFixedNew);
 
-		uint floatPaid = _mul(floatNotionalPaying, _sub(benchmarkIndexRatio, _scaleToExp(1)));
-		uint floatReceived = _mul(floatNotionalReceiving, _sub(benchmarkIndexRatio, _scaleToExp(1)));
-
-		uint parBlocksReceivingFloatNew = _sub(parBlocksReceivingFloat, _mul(fixedNotionalPaying, accruedBlocks));
-		uint parBlocksPayingFloatNew = _sub(parBlocksPayingFloat, _mul(fixedNotionalReceiving, accruedBlocks));
-
-		uint floatNotionalPayingNew = _mul(floatNotionalPaying, benchmarkIndexRatio);
-		uint floatNotionalReceivingNew = _mul(floatNotionalReceiving, benchmarkIndexRatio);
-
-		/* CALCULATE  PROTOCOL FIXED RATE CREDIT/DEBT
-		 * 		fixedToReceive -= accruedBlocks * fixedNotionalReceiving * avgFixedRateReceiving
-		 */
-
-		uint fixedReceived = _mul(accruedBlocks, _mul(fixedNotionalReceiving, _newExp(avgFixedRateReceivingMantissa)));
-		uint fixedToReceiveNew = _sub(fixedToReceive, fixedReceived);
-
-		uint fixedPaid = _mul(accruedBlocks, _mul(fixedNotionalPaying, _newExp(avgFixedRatePayingMantissa)));
-		uint fixedToPayNew = _sub(fixedToPay, fixedPaid);
-
-
-		/*  CALCULATE PROTOCOL P/L
-		 * 		totalLiquidity += fixedReceived + floatReceived - fixedPaid - floatPaid
-		 * 		supplyIndex *= totalLiquidityNew / totalLiquidity
-		 */
-
-		lockedCollateralNew = getLockedCollateral(
-			parBlocksPayingFloatNew,
-			parBlocksReceivingFloatNew,
-			minFloatRateMantissa,
-			maxFloatRateMantissa,
-			fixedToPayNew,
-			fixedToReceiveNew
-		);
-		// Short circuit if none of the values changed and need to be re-saved
 		if (accruedBlocks == 0) {
 			return lockedCollateralNew;
 		}
 
-		// XXX: safely handle totalLiquidity going negative?
-		vars.totalLiquidityNew = _sub(_add(totalLiquidity, _add(fixedReceived, floatReceived)), _add(fixedPaid, floatPaid));
+		Exp memory benchmarkIndexNew = _exp(getBenchmarkIndex());
+		Exp memory benchmarkIndexRatio = _div(benchmarkIndexNew, _exp(benchmarkIndexStored));
+		require(benchmarkIndexRatio.mantissa >= _oneExp().mantissa, "Decreasing float rate");
+		// TODO: put avgRateMantissa vars into EXPs
 
-		vars.supplyIndexNew = supplyIndex;
-		if (vars.totalLiquidityNew != 0) {
-			vars.supplyIndexNew = _div(_mul(supplyIndex, vars.totalLiquidityNew), totalLiquidity);
+		/*  Calculate protocol P/L by adding the cashflows since last accrual
+		 * 		totalLiquidity += fixedReceived + floatReceived - fixedPaid - floatPaid
+		 * 		supplyIndex *= totalLiquidityNew / totalLiquidity
+		 */
+		uint totalLiquidityNew;
+		{
+			uint floatPaid = _mul(notionalPayingFloat, _sub(benchmarkIndexRatio, _oneExp()));
+			uint floatReceived = _mul(notionalReceivingFloat, _sub(benchmarkIndexRatio, _oneExp()));
+			uint fixedPaid = _mul(accruedBlocks, _mul(notionalPayingFixed, _exp(avgFixedRatePayingMantissa)));
+			uint fixedReceived = _mul(accruedBlocks, _mul(notionalReceivingFixed, _exp(avgFixedRateReceivingMantissa)));
+			// XXX: safely handle totalLiquidity going negative?
+			totalLiquidityNew = _sub(_add(totalLiquidity, _add(fixedReceived, floatReceived)), _add(fixedPaid, floatPaid));
 		}
+
+		uint supplyIndexNew = supplyIndex;
+		if (totalLiquidityNew != 0) {
+			supplyIndexNew = _div(_mul(supplyIndex, totalLiquidityNew), totalLiquidity);
+		}
+
+		/*  Compound float notional */
+		uint notionalPayingFloatNew = _mul(notionalPayingFloat, benchmarkIndexRatio);
+		uint notionalReceivingFloatNew = _mul(notionalReceivingFloat, benchmarkIndexRatio);
 
 		// ** APPLY EFFECTS **
 
-		floatNotionalPaying = floatNotionalPayingNew;
-		floatNotionalReceiving = floatNotionalReceivingNew;
-		parBlocksPayingFloat = parBlocksPayingFloatNew;
-		parBlocksReceivingFloat = parBlocksReceivingFloatNew;
+		parBlocksPayingFixed = parBlocksPayingFixedNew;
+		parBlocksReceivingFixed = parBlocksReceivingFixedNew;
 
-		fixedToPay = fixedToPayNew;
-		fixedToReceive = fixedToReceiveNew;
+		totalLiquidity = totalLiquidityNew;
+		supplyIndex = supplyIndexNew;
 
-		totalLiquidity = vars.totalLiquidityNew;
-		supplyIndex = vars.supplyIndexNew;
+		notionalPayingFloat = notionalPayingFloatNew;
+		notionalReceivingFloat = notionalReceivingFloatNew;
 
-		benchmarkIndexStored = vars.benchmarkIndexNew.mantissa;
+		benchmarkIndexStored = benchmarkIndexNew.mantissa;
 		lastAccrualBlock = getBlockNumber();
-		emit Accrue(vars.totalLiquidityNew, lockedCollateralNew);
+
+		emit Accrue(totalLiquidityNew, lockedCollateralNew);
 		return lockedCollateralNew;
 	}
 
-	function getLockedCollateral(
-		uint parBlocksPayingFloatNew,
-		uint parBlocksReceivingFloatNew,
-		uint minFloatRateMantissa_,
-		uint maxFloatRateMantissa_,
-		uint fixedToPayNew,
-		uint fixedToReceiveNew
-	) public pure returns (uint lockedCollateralNew) {
-		uint minFloatToReceive = _mul(parBlocksReceivingFloatNew, _newExp(minFloatRateMantissa_));
-		uint maxFloatToPay = _mul(parBlocksPayingFloatNew, _newExp(maxFloatRateMantissa_));
+	function getLockedCollateral(int parBlocksPayingFixedNew, int parBlocksReceivingFixedNew) public view returns (uint) {
+		uint minFloatToReceive = _mul(_toUint(parBlocksPayingFixedNew), _exp(minFloatRateMantissa));
+		uint maxFloatToPay = _mul(_toUint(parBlocksReceivingFixedNew), _exp(maxFloatRateMantissa));
 
-		uint minCredit = _add(fixedToReceiveNew, minFloatToReceive);
-		uint maxDebt = _add(fixedToPayNew, maxFloatToPay);
+		uint fixedToReceive = _mul(_toUint(parBlocksReceivingFixedNew), _exp(avgFixedRateReceivingMantissa));
+		uint fixedToPay = _mul(_toUint(parBlocksPayingFixedNew), _exp(avgFixedRatePayingMantissa));
 
-		if (minCredit < maxDebt) {
+		uint minCredit = _add(fixedToReceive, minFloatToReceive);
+		uint maxDebt = _add(fixedToPay, maxFloatToPay);
+
+		if (maxDebt > minCredit) {
 			return _sub(maxDebt, minCredit);
 		} else {
 			return 0;
@@ -406,7 +344,7 @@ contract Rho is Math {
 	 *  = notionalAmount * swapMinDuration * (swapFixedRate - minFloatRate)
 	 */
 	function getPayFixedInitCollateral(Exp memory fixedRate, uint notionalAmount) public view returns (uint) {
-		Exp memory rateDelta = _sub(fixedRate, _newExp(minFloatRateMantissa));
+		Exp memory rateDelta = _sub(fixedRate, _exp(minFloatRateMantissa));
 		return _mul(_mul(swapMinDuration, notionalAmount), rateDelta);
 	}
 
@@ -414,7 +352,7 @@ contract Rho is Math {
 	 * = notionalAmount * swapMinDuration * (maxFloatRate - swapFixedRate)
 	 */
 	function getReceiveFixedInitCollateral(Exp memory fixedRate, uint notionalAmount) public view returns (uint) {
-		Exp memory rateDelta = _sub(_newExp(maxFloatRateMantissa), fixedRate);
+		Exp memory rateDelta = _sub(_exp(maxFloatRateMantissa), fixedRate);
 		return _mul(_mul(swapMinDuration, notionalAmount), rateDelta);
 	}
 
@@ -423,7 +361,7 @@ contract Rho is Math {
 	}
 
 	function getBenchmarkIndex() public view returns (uint) {
-		uint idx = benchmark.borrowIndex();
+		uint idx = benchmark.getBorrowIndex();
 		require(idx != 0, "Benchmark index is zero");
 		return idx;
 	}
