@@ -1,7 +1,7 @@
 pragma solidity ^0.5.12;
 
 interface InterestRateModelInterface {
-	function getRatePayFixed(uint orderNotional) external view returns (uint);
+	function getRate(bool userPayingFixed, uint orderNotional) external view returns (uint);
 	function getFee() external view returns (uint);
 }
 
@@ -18,12 +18,8 @@ contract InterestRateModel is InterestRateModelInterface {
 	// }
 
 	// 1e10 => 1e10 * 2102400 = 2.1024E16 => 2.1%
-	function getRatePayFixed(uint orderNotional) external view returns (uint) {
+	function getRate(bool userPayingFixed, uint orderNotional) external view returns (uint) {
 		return 1e10;
-	}
-
-	function getRate(uint swapType, uint orderNotional) internal returns (uint) {
-		return 1;
 	}
 
 	function getFee() public view returns (uint) {

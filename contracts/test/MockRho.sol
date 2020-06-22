@@ -5,7 +5,7 @@ import "../Rho.sol";
 
 contract MockRho is Rho {
 
-	uint blockNumber = 100;
+	uint public blockNumber = 100;
 
 	constructor (InterestRateModelInterface interestRateModel_, BenchmarkInterface benchmark_, IERC20 underlying_, uint minFloatRateMantissa_, uint maxFloatRateMantissa_)
 		Rho(interestRateModel_, benchmark_, underlying_, minFloatRateMantissa_, maxFloatRateMantissa_)

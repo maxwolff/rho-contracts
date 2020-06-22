@@ -5,7 +5,7 @@ const MAX_FLOAT_MANTISSA_PER_BLOCK = bn(1e11); // => 2.1024E17 per year via 2102
 
 const deployProtocol = async (opts = {}) => {
 	const mockCToken = opts.benchmark || (await deploy('MockCToken', []));
-	const model = await deploy('InterestRateModel', []);
+	const model = await deploy('MockInterestRateModel', []);
 	const underlying = await deploy('FaucetToken', [
 		'0',
 		'token1',
@@ -116,10 +116,9 @@ describe('Protocol Unit Tests', () => {
 
 		beforeEach(async () => {
 			await prep(rho._address, mantissa(1), underlying, a1);
-			const tx = await send(rho, 'openPayFixedSwap', [orderSize], {
+			const tx = await send(rho, 'open', [true, orderSize], {
 				from: a1,
 			});
-			console.log(tx.gasUsed);
 		});
 
 		// protocol pays float, receives fixed
@@ -203,9 +202,9 @@ describe('Protocol Unit Tests', () => {
 		const lateBlocks = bn(600);
 		const benchmarkIndexClose = mantissa(1.212); // 1% interest (6% annualized)
 
-		it('should close last swap on time', async () => {
+		it('should close last swap a little late', async () => {
 			await prep(rho._address, mantissa(1), underlying, a1);
-			await send(rho, 'openPayFixedSwap', [orderSize], { from: a1 });
+			await send(rho, 'open', [true, orderSize], { from: a1 });
 
 			await send(rho, 'advanceBlocks', [actualDuration]);
 			let userCollat = bn(
@@ -215,16 +214,15 @@ describe('Protocol Unit Tests', () => {
 					1e18
 			);
 			await send(mockCToken, 'setBorrowIndex', [benchmarkIndexClose]);
-			const tx = await send(rho, 'closePayFixedSwap', [
+			const tx = await send(rho, 'close', [
+				true,
 				benchmarkIndexInit,
 				block,
 				fixedRate,
 				orderSize,
-				MAX_FLOAT_MANTISSA_PER_BLOCK,
 				userCollat,
-				a1,
+				a1
 			]);
-			console.log(tx.gasUsed);
 
 			expect(
 				await call(rho, 'avgFixedRateReceivingMantissa', [])
@@ -242,17 +240,22 @@ describe('Protocol Unit Tests', () => {
 			);
 		});
 
-		it('should close second last swap on time', async () => {
+		it('should close second last swap a little late', async () => {
 			// open swap, open second at end of first, close first.
 
 			await prep(rho._address, mantissa(1), underlying, a1);
-			await send(rho, 'openPayFixedSwap', [orderSize], { from: a1 });
-
+			await send(rho, 'open', [true, orderSize], { from: a1 });
 			await send(rho, 'advanceBlocks', [actualDuration]);
 
+			await send(model, 'setRate', [bn(2e10)]);
 			await send(mockCToken, 'setBorrowIndex', [benchmarkIndexClose]);
 			await prep(rho._address, mantissa(1), underlying, a2);
-			await send(rho, 'openPayFixedSwap', [orderSize], { from: a2 });
+			let tx0 = await send(rho, 'open', [true, orderSize], { from: a2 });
+			console.log(tx0.gasUsed);
+
+			expect(
+				await call(rho, 'avgFixedRateReceivingMantissa', [])
+			).toEqNum(1.5e10);
 
 			let userCollat = bn(
 				(345600 *
@@ -260,19 +263,20 @@ describe('Protocol Unit Tests', () => {
 					(fixedRate - MIN_FLOAT_MANTISSA_PER_BLOCK)) /
 					1e18
 			);
-			const tx = await send(rho, 'closePayFixedSwap', [
+			let bal1A1 = await call(underlying, 'balanceOf',[a1]);
+			const tx = await logSend(rho, 'close', [
+				true,
 				benchmarkIndexInit,
 				block,
 				fixedRate,
 				orderSize,
-				MAX_FLOAT_MANTISSA_PER_BLOCK,
 				userCollat,
 				a1,
 			]);
-			//TODO: actually check the rates
+			console.log(tx.gasUsed);
 			expect(
 				await call(rho, 'avgFixedRateReceivingMantissa', [])
-			).toEqNum(1e10);
+			).toEqNum(2e10);
 			expect(await call(rho, 'notionalReceivingFixed', [])).toEqNum(
 				orderSize
 			);
@@ -283,10 +287,12 @@ describe('Protocol Unit Tests', () => {
 			);
 			/* floatLeg = 10e18 * (1.212 / 1.2 - 1) = 0.1e18
 			 * fixedLeg = 10e18 * 345700 * 1e10 / 1e18 = 3.457e16
-			 * 1e18 - 0.1e18 + 3.457e16 + user collat
+			 * userCollat = 3.456e16
+			 * 3.456e16 + 0.1e18 - 3.457e16 = 9.999e16
 			 */
-			expect(await call(underlying, 'balanceOf', [rho._address])).toEqNum(
-				0.96913e18
+			let bal2A1 = await call(underlying, 'balanceOf',[a1]);
+			expect(bal2A1 - bal1A1).toEqNum(
+				9.999e16
 			);
 		});
 	});

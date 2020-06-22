@@ -21,7 +21,7 @@ contract Rho is Math {
 	uint public lastAccrualBlock;
 	uint public benchmarkIndexStored;
 
-	/* notional size of each leg */
+	/* notional size of each leg, one adjusting for compounding and one static */
 	uint public notionalReceivingFixed;
 	uint public notionalPayingFloat;
 
@@ -33,7 +33,6 @@ contract Rho is Math {
 	int public parBlocksPayingFixed;
 
 	/* Fixed / float interest rates used in collateral calculations */
-
 	uint public avgFixedRateReceivingMantissa;
 	uint public avgFixedRatePayingMantissa;
 
@@ -46,18 +45,18 @@ contract Rho is Math {
 	uint public totalLiquidity;
 
 	mapping(address => SupplyAccount) public accounts;
-	mapping(bytes32 => bool) public payFixedSwaps;
+	mapping(bytes32 => bool) public swaps;
 
 	event Test(uint a, uint b, uint c);
 	event Accrue(uint totalLiquidityNew, uint lockedCollateralNew);
 
-	event OpenPayFixedSwap(
+	event OpenSwap(
 		bytes32 txHash,
+		bool userPayingFixed,
 		uint benchmarkIndexInit,
 		uint initBlock,
 		uint swapFixedRateMantissa,
 		uint notionalAmount,
-		uint maxFloatRateMantissa,
 		uint userCollateral,
 		address indexed owner
 	);
@@ -68,8 +67,8 @@ contract Rho is Math {
 		uint supplyIndex;
 	}
 
-	struct PayFixedSwap {
-		uint priorMaxFloatRateMantissa;
+	struct Swap {
+		bool userPayingFixed;
 		uint notionalAmount;
 		uint swapFixedRateMantissa;
 		uint benchmarkIndexInit;
@@ -117,16 +116,26 @@ contract Rho is Math {
 	*/
 	// add owner as a param?
 
-
-	function openPayFixedSwap(uint notionalAmount) public returns (bytes32 swapHash) {
+	function open(bool userPayingFixed, uint notionalAmount) public returns (bytes32 swapHash) {
 		uint lockedCollateral = accrue();
-		Exp memory swapFixedRate = _exp(interestRateModel.getRatePayFixed(notionalAmount));
+		Exp memory swapFixedRate = getRate(userPayingFixed, notionalAmount);
 
-		// protocol is receiving fixed, if user is paying fixed
-		uint lockedCollateralHypothetical = _add(lockedCollateral, getReceiveFixedInitCollateral(swapFixedRate, notionalAmount));
+		uint userCollateral;
+		if (userPayingFixed) {
+			uint lockedCollateralHypothetical = _add(lockedCollateral, getReceiveFixedInitCollateral(swapFixedRate, notionalAmount));
+			require(lockedCollateralHypothetical <= totalLiquidity, "Insufficient protocol collateral");
+			(swapHash, userCollateral) = openPayFixedSwapInternal(notionalAmount, swapFixedRate);
+		} else {
+			// TODO:
+			require(false, "Error");
+		}
+		swaps[swapHash] = true;
+		transferIn(msg.sender, userCollateral);
+	}
 
-		require(lockedCollateralHypothetical <= totalLiquidity, "Insufficient protocol collateral");
 
+	/* protocol is receiving fixed, if user is paying fixed */
+	function openPayFixedSwapInternal(uint notionalAmount, Exp memory swapFixedRate) internal returns (bytes32 swapHash, uint userCollateral) {
 		uint notionalReceivingFixedNew = _add(notionalReceivingFixed, notionalAmount);
 		uint notionalPayingFloatNew = _add(notionalPayingFloat, notionalAmount);
 
@@ -140,128 +149,128 @@ contract Rho is Math {
 			avgFixedRateReceivingNew = _div(_add(priorFixedReceivingRate, orderFixedReceivingRate), notionalReceivingFixedNew);
 		}
 
-		uint userCollateral = getPayFixedInitCollateral(swapFixedRate, notionalAmount);
+		userCollateral = getPayFixedInitCollateral(swapFixedRate, notionalAmount);
 
 		swapHash = keccak256(abi.encode(
+			true, 				    // userPayingFixed
 			benchmarkIndexStored,
 			getBlockNumber(),
 			swapFixedRate.mantissa,
 			notionalAmount,
-			maxFloatRateMantissa,
 			userCollateral,
 			msg.sender
 		));
 
-		require(payFixedSwaps[swapHash] == false, "Duplicate swap");
-		payFixedSwaps[swapHash] = true;
+		require(swaps[swapHash] == false, "Duplicate swap");
 
-		emit OpenPayFixedSwap(
+		emit OpenSwap(
 			swapHash,
+			true, 					// userPayingFixed
 			benchmarkIndexStored,
 			getBlockNumber(),
 			swapFixedRate.mantissa,
 			notionalAmount,
-			maxFloatRateMantissa,
 			userCollateral,
 			msg.sender
 		);
 
-		avgFixedRateReceivingMantissa = avgFixedRateReceivingNew.mantissa;
+		notionalPayingFloat = notionalPayingFloatNew;
 		notionalReceivingFixed = notionalReceivingFixedNew;
+		avgFixedRateReceivingMantissa = avgFixedRateReceivingNew.mantissa;
 		parBlocksReceivingFixed = parBlocksReceivingFixedNew;
 
-		notionalPayingFloat = notionalPayingFloatNew;
-
-		// require true?
-		underlying.transferFrom(msg.sender, address(this), userCollateral);
-		return swapHash;
+		return (swapHash, userCollateral);
 	}
 
 	// function openReceiveFixedSwap(uint notionalAmount) public {
 	// }
 
-	struct ClosePayFixedLocalVars {
-		Exp actualFloatRate;
-		uint swapFixedRateMantissa;
-	}
-
-	function closePayFixedSwap(
+	function close(
+		bool userPayingFixed,
 		uint benchmarkInitIndex,
 		uint initBlock,
 		uint swapFixedRateMantissa,
 		uint notionalAmount,
-		uint priorMaxFloatRateMantissa,
 		uint userCollateral,
 		address owner
 	) public {
 		accrue();
-
-		ClosePayFixedLocalVars memory vars;
-		vars.swapFixedRateMantissa = swapFixedRateMantissa;
 		bytes32 swapHash = keccak256(abi.encode(
+			userPayingFixed,
 			benchmarkInitIndex,
 			initBlock,
 			swapFixedRateMantissa,
 			notionalAmount,
-			priorMaxFloatRateMantissa,
 			userCollateral,
 			owner
 		));
 		uint swapDuration = _sub(getBlockNumber(), initBlock);
 		require(swapDuration >= swapMinDuration, "Premature close swap");
+		require(swaps[swapHash] == true, "No active swap found");
+		Exp memory floatRate = _div(_exp(benchmarkIndexStored), _exp(benchmarkInitIndex));
 
-		require(payFixedSwaps[swapHash] == true, "No active swap found");
+		uint userPayout;
+		if (userPayingFixed == true) {
+			userPayout = closePayFixedSwapInternal(
+				swapDuration,
+				floatRate,
+				swapFixedRateMantissa,
+				notionalAmount,
+				userCollateral,
+				owner
+			);
+		} else {
+			//todo
+			require(false, 'error');
+		}
+		// TODO: emit event
+		swaps[swapHash] = false;
+		transferOut(owner, userPayout);
+	}
 
-		vars.actualFloatRate = _div(_exp(benchmarkIndexStored), _exp(benchmarkInitIndex));
-
+	function closePayFixedSwapInternal(
+		uint swapDuration,
+		Exp memory floatRate,
+		uint swapFixedRateMantissa,
+		uint notionalAmount,
+		uint userCollateral,
+		address owner
+	) internal returns (uint userPayout) {
 		uint notionalReceivingFixedNew = _sub(notionalReceivingFixed, notionalAmount);
-		uint notionalPayingFloatNew = _sub(notionalPayingFloat, _mul(notionalAmount, vars.actualFloatRate));
+		uint notionalPayingFloatNew = _sub(notionalPayingFloat, _mul(notionalAmount, floatRate));
 
 		/* avgFixedRateReceiving = avgFixedRateReceiving * notionalReceivingFixed - swapFixedRateMantissa * notionalAmount / notionalReceivingFixedNew */
 		Exp memory avgFixedRateReceivingNew;
-		if (notionalReceivingFixedNew != 0 ){
-			Exp memory numerator = _sub(_mul(_exp(avgFixedRateReceivingMantissa), notionalReceivingFixed), _mul(_exp(vars.swapFixedRateMantissa), notionalAmount));
-			avgFixedRateReceivingNew = _div(numerator, notionalReceivingFixedNew);
-		} else {
+		if (notionalReceivingFixedNew == 0 ){
 			avgFixedRateReceivingNew = _exp(0);
+		} else {
+			Exp memory numerator = _sub(_mul(_exp(avgFixedRateReceivingMantissa), notionalReceivingFixed), _mul(_exp(swapFixedRateMantissa), notionalAmount));
+			avgFixedRateReceivingNew = _div(numerator, notionalReceivingFixedNew);
 		}
 
 		/* Late blocks adjustments. The protocol reserved enough collateral for this swap for ${swapDuration}, but its has been ${swapDuration + lateBlocks}.
 		 * We have consistently decreased the lockedCollateral from the `open` fn in every `accrue`, and in fact we have decreased it by more than we ever added in the first place.
 		 */
 
-
-		int parBlocksReceivingFixedNew;
-		{
-			uint lateBlocks = _sub(swapDuration, swapMinDuration);
-			parBlocksReceivingFixedNew = _add(parBlocksReceivingFixed, _mul(notionalAmount, lateBlocks));
-		}
+		uint lateBlocks = _sub(swapDuration, swapMinDuration);
+		int parBlocksReceivingFixedNew = _add(parBlocksReceivingFixed, _mul(notionalAmount, lateBlocks));
 
 		/* Calculate the user's payout:
 		 * 		fixedLeg = notionalAmount * swapDuration * swapFixedRate
-		 * 		floatLeg = notionalAmount * min(actualFloatRate, priorMaxFloatRate)
-		 * 		userPayout = userCollateral + fixedLeg - floatLeg
+		 * 		floatLeg = notionalAmount * min(floatRate, priorMaxFloatRate)
+		 * 		userPayout = userCollateral + floatLeg - fixedLeg
 		 */
 
-		 /// ***** TODO: max the user payout. Potentially using max float rate.
-		uint userPayout;
-		{
-			uint fixedLeg = _mul(_mul(notionalAmount, swapDuration), _exp(vars.swapFixedRateMantissa));
-			uint floatLeg = _mul(notionalAmount,_sub(vars.actualFloatRate, _oneExp()));
-			userPayout = _sub(_add(userCollateral, floatLeg), fixedLeg);
-		}
-
-		/* Apply effects and interactions */
-
-		payFixedSwaps[swapHash] = false;
+		uint fixedLeg = _mul(_mul(notionalAmount, swapDuration), _exp(swapFixedRateMantissa));
+		uint floatLeg = _mul(notionalAmount,_sub(floatRate, _oneExp()));
+		userPayout = _sub(_add(userCollateral, floatLeg), fixedLeg);
 
 		notionalReceivingFixed = notionalReceivingFixedNew;
 		notionalPayingFloat = notionalPayingFloatNew;
-
 		parBlocksReceivingFixed = parBlocksReceivingFixedNew;
 		avgFixedRateReceivingMantissa = avgFixedRateReceivingNew.mantissa;
 
-		underlying.transfer(owner, userPayout);
+		return userPayout;
 	}
 
 	function accrue() internal returns (uint lockedCollateralNew) {
@@ -366,11 +375,27 @@ contract Rho is Math {
 		return idx;
 	}
 
+	// TODO: Add more validation?
+	function transferIn(address from, uint value) internal {
+		// uint cTokenAmount = _mul(value, underlying.getExchangeRate());
+		underlying.transferFrom(from, address(this), value);
+	}
+
+	function transferOut(address to, uint value) internal {
+		underlying.transfer(to, value);
+	}
+
+	function getRate(bool userPayingFixed, uint notionalAmount) internal returns (Exp memory rate) {
+		return _exp(interestRateModel.getRate(userPayingFixed, notionalAmount));
+	}
+
 	// ** ADMIN FUNCTIONS **
 
 	// function _setInterestRateModel() {}
 
 	// function _setCollateralRequirements(uint minFloatRateMantissa_, uint maxFloatRateMantissa_){}
+
+	// function _setMaxLiquidity() {}
 
 	// function pause() {}
 
