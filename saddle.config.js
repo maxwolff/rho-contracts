@@ -21,16 +21,22 @@ module.exports = {
     development: {
       providers: [                                      // How to load provider (processed in order)
         {env: "PROVIDER"},                              // Try to load Http provider from `PROVIDER` env variable (e.g. env PROVIDER=http://...)
-        {http: "http://127.0.0.1:8545"}                 // Fallback to localhost provider
+        {ganache: {
+          gasLimit: 20000000,
+          gasPrice: 20000,
+          defaultBalanceEther: 1000000000,
+          allowUnlimitedContractSize: true,
+          hardfork: 'istanbul'
+        }}
       ],
       web3: {                                           // Web3 options for immediate confirmation in development mode
         gas: [
           {env: "GAS"},
-          {default: "4600000"}
+          {default: "6700000"}
         ],
         gas_price: [
           {env: "GAS_PRICE"},
-          {default: "12000000000"}
+          {default: "20000"}
         ],
         options: {
           transactionConfirmationBlocks: 1,
@@ -45,16 +51,24 @@ module.exports = {
     test: {
       providers: [
         {env: "PROVIDER"},
-        {ganache: {}},                                  // In test mode, connect to a new ganache provider. Any options will be passed to ganache
+        {
+          ganache: {
+            gasLimit: 200000000,
+            gasPrice: 20000,
+            defaultBalanceEther: 1000000000,
+            allowUnlimitedContractSize: true,
+            hardfork: 'istanbul'
+          }
+        },                                  // In test mode, connect to a new ganache provider. Any options will be passed to ganache
       ],
       web3: {
         gas: [
           {env: "GAS"},
-          {default: "4600000"}
+          {default: "20000000"}
         ],
         gas_price: [
           {env: "GAS_PRICE"},
-          {default: "12000000000"}
+          {default: "12000000002"}
         ],
         options: {
           transactionConfirmationBlocks: 1,

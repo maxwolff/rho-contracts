@@ -53,15 +53,21 @@ const mantissa = num => {
   return ethers.utils.bigNumberify(new BigNumber(num).times(1e18).toFixed());
 }
 
-const prep = async (spender, amount, token, who) => {
-	await send(token, "allocateTo", [who, amount]);
-	await send(token, "approve", [spender, amount], { from: who });
-};
+const cTokens = num => {
+  return ethers.utils.bigNumberify(new BigNumber(num).times(1e8).toFixed());
+}
+
+const hashEncode = (args) => {
+	const web3 = new (require('web3'))();
+	let str = web3.eth.abi.encodeParameters(['bool', 'uint256', 'uint256', 'uint256', 'uint256', 'uint256', 'address'], args);
+	return web3.utils.keccak256(str);
+}
 
 module.exports = {
 	bn,
 	sendCall,
 	logSend,
-	prep,
-	mantissa
+	mantissa,
+	hashEncode,
+	cTokens
 };

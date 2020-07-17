@@ -1,4 +1,4 @@
-pragma solidity ^0.5.12;
+pragma solidity ^0.6.10;
 
 interface InterestRateModelInterface {
 	function getRate(bool userPayingFixed, uint orderNotional) external view returns (uint);
@@ -17,12 +17,14 @@ contract InterestRateModel is InterestRateModelInterface {
 
 	// }
 
-	// 1e10 => 1e10 * 2102400 = 2.1024E16 => 2.1%
-	function getRate(bool userPayingFixed, uint orderNotional) external view returns (uint) {
+	function getRate(bool userPayingFixed, uint orderNotional) external view virtual override returns (uint) {
+		userPayingFixed;
+		orderNotional;
+		// 1e10 * 2102400 /1e18 = 2.1%
 		return 1e10;
 	}
 
-	function getFee() public view returns (uint) {
+	function getFee() public view override returns (uint) {
 		return 1;
 	}
 

@@ -1,8 +1,12 @@
-pragma solidity ^0.5.12;
+pragma solidity ^0.6.10;
 
 contract Math {
 
 	uint constant EXP_SCALE = 1e18;
+
+    struct CTokenAmount {
+        uint val;
+    }
 
 	struct Exp {
     	uint mantissa;
@@ -22,6 +26,10 @@ contract Math {
         return Exp({mantissa: _add(a.mantissa, b.mantissa)});
     }
 
+    function _add(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (CTokenAmount memory) {
+        return CTokenAmount({val: _add(a.val, b.val)});
+    }
+
     function _add(uint a, uint b) pure internal returns (uint) {
         uint c = a + b;
         require(c >= a, "addition overflow");
@@ -30,6 +38,10 @@ contract Math {
 
     function _sub(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
         return Exp({mantissa: _sub(a.mantissa, b.mantissa)});
+    }
+
+    function _sub(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (CTokenAmount memory) {
+        return CTokenAmount({val: _sub(a.val, b.val)});
     }
 
     function _sub(uint a, uint b) pure internal returns (uint) {
@@ -54,6 +66,14 @@ contract Math {
         return a < 0 ? uint(0) : uint(a);
     }
 
+    function _mul(uint a, CTokenAmount memory b) pure internal returns (uint) {
+        return _mul(a, b.val);
+    }
+
+    function _mul(CTokenAmount memory a, uint b) pure internal returns (CTokenAmount memory) {
+        return CTokenAmount({val: _mul(a.val, b)});
+    }
+
     function _mul(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
         return Exp({mantissa: _mul(a.mantissa, b.mantissa) / EXP_SCALE});
     }
@@ -73,6 +93,14 @@ contract Math {
         uint c = a * b;
         require(c / a == b, "multiplication overflow");
         return c;
+    }
+
+    function _div(uint a, CTokenAmount memory b) pure internal returns (uint) {
+        return _div(a, b.val);
+    }
+
+    function _div(CTokenAmount memory a, uint b) pure internal returns (CTokenAmount memory) {
+        return CTokenAmount({val: _div(a.val, b)});
     }
 
     function _div(Exp memory a, Exp memory b) pure internal returns (Exp memory) {

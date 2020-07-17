@@ -1,5 +1,5 @@
 pragma experimental ABIEncoderV2;
-pragma solidity ^0.5.12;
+pragma solidity ^0.6.10;
 
 import "../Rho.sol";
 
@@ -7,15 +7,15 @@ contract MockRho is Rho {
 
 	uint public blockNumber = 100;
 
-	constructor (InterestRateModelInterface interestRateModel_, BenchmarkInterface benchmark_, IERC20 underlying_, uint minFloatRateMantissa_, uint maxFloatRateMantissa_)
-		Rho(interestRateModel_, benchmark_, underlying_, minFloatRateMantissa_, maxFloatRateMantissa_)
+	constructor (InterestRateModelInterface interestRateModel_, BenchmarkInterface benchmark_, CTokenInterface cTokenCollateral_, uint minFloatRateMantissa_, uint maxFloatRateMantissa_)
+		Rho(interestRateModel_, benchmark_, cTokenCollateral_, minFloatRateMantissa_, maxFloatRateMantissa_)
 		public {}
 
 	function setBlockNumber(uint blockNumber_) public returns (uint) {
 		blockNumber = blockNumber_;
 	}
 
-	function getBlockNumber() public view returns (uint) {
+	function getBlockNumber() public view override returns (uint) {
 		return blockNumber;
 	}
 

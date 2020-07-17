@@ -1,4 +1,4 @@
-pragma solidity ^0.5.12;
+pragma solidity ^0.6.10;
 
 import "../InterestRateModel.sol";
 
@@ -9,7 +9,9 @@ contract MockInterestRateModel is InterestRateModel {
 		rate = rate_;
 	}
 
-	function getRate(bool userPayingFixed, uint orderNotional) external view returns (uint) {
+	function getRate(bool userPayingFixed, uint orderNotional) external view override returns (uint) {
+		userPayingFixed;
+		orderNotional;
 		return rate;
 	}
 }
