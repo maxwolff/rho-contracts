@@ -12,6 +12,18 @@ contract Math {
     	uint mantissa;
     }
 
+    function _lt(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (bool) {
+        return a.val < b.val;
+    }
+
+    function _lte(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (bool) {
+        return a.val <= b.val;
+    }
+
+    function _gt(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (bool) {
+        return a.val > b.val;
+    }
+
 	/* always returns type of left side param */
 
     function _exp(uint num) pure internal returns (Exp memory) {

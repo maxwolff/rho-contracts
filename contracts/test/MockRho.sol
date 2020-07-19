@@ -7,8 +7,24 @@ contract MockRho is Rho {
 
 	uint public blockNumber = 100;
 
-	constructor (InterestRateModelInterface interestRateModel_, BenchmarkInterface benchmark_, CTokenInterface cTokenCollateral_, uint minFloatRateMantissa_, uint maxFloatRateMantissa_)
-		Rho(interestRateModel_, benchmark_, cTokenCollateral_, minFloatRateMantissa_, maxFloatRateMantissa_)
+	constructor (
+		InterestRateModelInterface interestRateModel_,
+		BenchmarkInterface benchmark_,
+		CTokenInterface cTokenCollateral_,
+		uint minFloatRateMantissa_,
+		uint maxFloatRateMantissa_,
+		uint swapMinDuration_,
+		uint supplyMinDuration_
+	)
+		Rho(
+			interestRateModel_,
+			benchmark_,
+			cTokenCollateral_,
+			minFloatRateMantissa_,
+			maxFloatRateMantissa_,
+			swapMinDuration_,
+			supplyMinDuration_
+		)
 		public {}
 
 	function setBlockNumber(uint blockNumber_) public returns (uint) {
@@ -23,7 +39,7 @@ contract MockRho is Rho {
 		supplyIndex = supplyIndex_;
 	}
 
-	function harnessAccrueInterest() public returns (uint lockedCollateralNew){
+	function harnessAccrueInterest() public returns (CTokenAmount memory lockedCollateralNew){
 		return super.accrue();
 	}
 
