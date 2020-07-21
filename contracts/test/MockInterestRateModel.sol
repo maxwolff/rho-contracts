@@ -2,16 +2,19 @@ pragma solidity ^0.6.10;
 
 import "../InterestRateModel.sol";
 
-contract MockInterestRateModel is InterestRateModel {
-	uint public rate = 1e10;
+contract MockInterestRateModel is InterestRateModelInterface {
+	uint public mockRate = 1e10;
 
 	function setRate(uint rate_) public {
-		rate = rate_;
+		mockRate = rate_;
 	}
 
-	function getRate(bool userPayingFixed, uint orderNotional) external view override returns (uint) {
+	function getSwapRate(bool userPayingFixed, int rateFactorPrev, uint orderNotional, uint lockedCollateralUnderlying, uint supplierLiquidityUnderlying) external override view returns (uint rate, int rateFactorNew) {
 		userPayingFixed;
+		rateFactorPrev;
 		orderNotional;
-		return rate;
+		lockedCollateralUnderlying;
+		supplierLiquidityUnderlying;
+		return (mockRate, 0);
 	}
 }

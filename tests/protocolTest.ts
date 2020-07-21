@@ -1,4 +1,4 @@
-const { bn, mantissa, sendCall, logSend, hashEncode, cTokens } = require('./util/Helpers');
+const { bn, mantissa, hashEncode, cTokens } = require('./util/Helpers');
 
 const MIN_FLOAT_MANTISSA_PER_BLOCK = bn(0);
 const MAX_FLOAT_MANTISSA_PER_BLOCK = bn(1e11); // => 2.1024E17 per year via 2102400 blocks / year. ~21%, 3.5% (3.456E16) per 60 days (345600 blocks)

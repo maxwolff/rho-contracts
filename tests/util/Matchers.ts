@@ -2,23 +2,9 @@ const BigNumber = require('bignumber.js');
 const { bn, mantissa } = require('./Helpers');
 let assert = require('assert');
 
-// let saddleSend = deploy;
-// // log input, for testing
-// deploy = async (a, b, c, d) => {
-//   try {
-//     let f = await saddleSend(a, b, c, d);
-//     assert(!!f, 'why undefined');
-//     console.log(a,b);
-//   } catch(e) {
-//     throw e
-//   };
-// };
-
 const msg = (expected, actual) => {
   return `Expected: ${JSON.stringify(expected.toString())}, \n Actual: ${JSON.stringify(actual.toString())}}`;
 }
-
-let i = 0;
 
 expect.extend({
   toEqNum(expected, actual) {
@@ -41,7 +27,7 @@ expect.extend({
     }
   },
 
-  toAlmostEqual(expected, actual, precision) {
+  toAlmostEqual(expected, actual, precision=5) {
     const bnActual = new BigNumber(actual.toString()).toPrecision(precision);
     const bnExpected = new BigNumber(expected.toString()).toPrecision(
       precision

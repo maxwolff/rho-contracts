@@ -80,5 +80,8 @@ module.exports = {
         {unlocked: 0}
       ]
     }
+  },
+  scripts: {
+    'deploy': "script/deploy.ts"
   }
 }

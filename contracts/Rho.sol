@@ -49,6 +49,8 @@ contract Rho is Math {
 	uint public supplyIndex;
 	CTokenAmount public supplierLiquidity;
 
+	int public rateFactor;
+
 	mapping(address => SupplyAccount) public supplyAccounts;
 	mapping(bytes32 => bool) public swaps;
 
@@ -165,7 +167,7 @@ contract Rho is Math {
 
 	function open(bool userPayingFixed, uint notionalAmount) public returns (bytes32 swapHash) {
 		CTokenAmount memory lockedCollateral = accrue();
-		Exp memory swapFixedRate = getRate(userPayingFixed, notionalAmount);
+		Exp memory swapFixedRate = getSwapRate(userPayingFixed, notionalAmount, lockedCollateral.val, supplierLiquidity.val);
 
 		CTokenAmount memory userCollateralCTokens;
 		if (userPayingFixed) {
@@ -437,18 +439,19 @@ contract Rho is Math {
 		return idx;
 	}
 
-	function getRate(bool userPayingFixed, uint notionalAmount) internal view returns (Exp memory rate) {
-		return _exp(interestRateModel.getRate(userPayingFixed, notionalAmount));
-	}
-
 	function getBlockNumber() public view virtual returns (uint) {
 		return block.number;
 	}
 
-
 	function getLockedCollateral() external view returns (CTokenAmount memory lockedCollateral) {
 		uint accruedBlocks = getBlockNumber() - lastAccrualBlock;
 		(lockedCollateral,,) = getLockedCollateralInternal(accruedBlocks);
+	}
+
+	function getSwapRate(bool userPayingFixed, uint orderNotional, uint lockedCollateralUnderlying, uint supplierLiquidityUnderlying) internal returns (Exp memory) {
+		(uint rate, int rateFactorNew) = interestRateModel.getSwapRate(userPayingFixed, rateFactor, orderNotional, lockedCollateralUnderlying, supplierLiquidityUnderlying);
+		rateFactor = rateFactorNew;
+		return _exp(rate);
 	}
 
 
@@ -458,7 +461,7 @@ contract Rho is Math {
 
 	// function _setCollateralRequirements(uint minFloatRateMantissa_, uint maxFloatRateMantissa_){}
 
-	// function _setMaxLiquidity() {}
+	// function _setMaxSupplierLiquidity() {}
 
 	// function pause() {}
 
