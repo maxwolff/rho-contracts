@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.6.10;
 
 import "../InterestRateModel.sol";
@@ -9,9 +10,9 @@ contract MockInterestRateModel is InterestRateModelInterface {
 		mockRate = rate_;
 	}
 
-	function getSwapRate(bool userPayingFixed, int rateFactorPrev, uint orderNotional, uint lockedCollateralUnderlying, uint supplierLiquidityUnderlying) external override view returns (uint rate, int rateFactorNew) {
-		userPayingFixed;
+	function getSwapRate(int rateFactorPrev, bool userPayingFixed,  uint orderNotional, uint lockedCollateralUnderlying, uint supplierLiquidityUnderlying) external override view returns (uint rate, int rateFactorNew) {
 		rateFactorPrev;
+		userPayingFixed;
 		orderNotional;
 		lockedCollateralUnderlying;
 		supplierLiquidityUnderlying;
