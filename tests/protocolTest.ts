@@ -5,6 +5,7 @@ const MAX_FLOAT_MANTISSA_PER_BLOCK = bn(1e11); // => 2.1024E17 per year via 2102
 const INIT_EXCHANGE_RATE = bn(2e8);
 const SWAP_MIN_DURATION = bn(345600);// 60 days in blocks, assuming 15s blocks
 const SUPPLY_MIN_DURATION = bn(172800);
+const BLOCKS_PER_YEAR = bn(2102400);
 
 const prep = async (spender, amount, token, who) => {
 	await send(token, "allocateTo", [who, amount]);
@@ -18,6 +19,10 @@ let print = (msg, src) => {
 const getCloseArgs = (openTx) => {
 	const vals = openTx.events.OpenSwap.returnValues;
 	return [vals.userPayingFixed, vals.benchmarkIndexInit, vals.initBlock, vals.swapFixedRateMantissa, vals.notionalAmount, vals.userCollateralCTokens, vals.owner];
+}
+
+const annualize = (interestPerBlock) => {
+	return bn(interestPerBlock).mul(BLOCKS_PER_YEAR);
 }
 
 const deployProtocol = async (opts = {}) => {
@@ -85,7 +90,7 @@ describe('Protocol Unit Tests', () => {
 
 		it('should update account struct', async () => {
 			const acct = await call(rho, 'supplyAccounts', [lp]);
-			expect(acct.amount.val).toEqNum(supplyAmount);
+			expect(acct.amount).toEqNum(supplyAmount);
 			expect(acct.lastBlock).toEqNum(block);
 			expect(acct.index).toEqNum(mantissa(1));
 		});
@@ -112,7 +117,7 @@ describe('Protocol Unit Tests', () => {
 		const setup = async () => {
 			await prep(rho._address, mantissa(1), cTokenCollateral, a1);
 			await send(model, 'setRate', [bn(1e10)]);
-			openTx = await send(rho, 'open', [true, mantissa(10)], { from: a1 });
+			openTx = await send(rho, 'open', [true, mantissa(10), annualize(1e10)], { from: a1 });
 		};
 
 		it('should succeed in removing liquidity at protocols loss', async () => {
@@ -214,14 +219,29 @@ describe('Protocol Unit Tests', () => {
 	describe('open user paying fixed', () => {
 
 		describe('reverts', () => {
+			const swapFixedRate = bn(1e10);
+			const userPayingFixed = true;
 			it('insufficient collateral', async () => {
 				await prep(rho._address, mantissa(1), cTokenCollateral, a1);
-				await send(model, 'setRate', [bn(1e10)]);
+
+				await send(model, 'setRate', [swapFixedRate]);
 				/* lockedCollateral = notionalAmount * swapMinDuration * (maxFloatRate - swapFixedRate);
 				 * 					= 40e18 * 345600 * (1e11 - 1e10) / 1e18 / 2e8 = 62.208e8
 				 * supplyAmount (50e8) < hypotheticalLockedCollateral ()
 				 */
-				await expect(send(rho, 'open', [true, mantissa(40)], {from: a1})).rejects.toRevert('Insufficient protocol collateral');
+				await expect(send(rho, 'open', [userPayingFixed, mantissa(40), annualize(swapFixedRate)], {from: a1})).rejects.toRevert('Insufficient protocol collateral');
+			});
+
+			it('minimum swap size', async () => {
+				await prep(rho._address, mantissa(1), cTokenCollateral, a1);
+				await send(model, 'setRate', [bn(1e10)]);
+				await expect(send(rho, 'open', [userPayingFixed, mantissa(0.1), annualize(swapFixedRate)], {from: a1})).rejects.toRevert('Swap notional amount must exceed minimum');
+			});
+
+			it('pay fixed rate too high', async () => {
+				await prep(rho._address, mantissa(1), cTokenCollateral, a1);
+				await send(model, 'setRate', [bn(1.1e10)]);
+				await expect(send(rho, 'open', [userPayingFixed, mantissa(1), annualize(swapFixedRate)], {from: a1})).rejects.toRevert('The fixed rate Rho would receive is above user\'s limit');
 			});
 		});
 
@@ -233,7 +253,7 @@ describe('Protocol Unit Tests', () => {
 			beforeEach(async () => {
 				await prep(rho._address, mantissa(1), cTokenCollateral, a1);
 				await send(model, 'setRate', [swapFixedRate]);
-				openTx = await send(rho, 'open', [true, orderSize], {
+				openTx = await send(rho, 'open', [true, orderSize, annualize(swapFixedRate)], {
 					from: a1
 				});
 			});
@@ -318,7 +338,7 @@ describe('Protocol Unit Tests', () => {
 			it('should average interest rates', async () => {
 				await send(model, 'setRate', [2e10]);
 				await prep(rho._address, mantissa(1), cTokenCollateral, a2);
-				await send(rho, 'open', [true, orderSize], { from: a2 });
+				await send(rho, 'open', [true, orderSize, annualize(2e10)], { from: a2 });
 				expect(
 					await call(rho, 'avgFixedRateReceivingMantissa', [])
 				).toEqNum(1.5e10);
@@ -328,14 +348,28 @@ describe('Protocol Unit Tests', () => {
 
 	describe('open user receiving fixed', () => {
 		describe('reverts', () => {
+			const swapFixedRate = bn(5e10);
+			const userPayingFixed = false;
 			it('insufficient collateral', async () => {
 				await prep(rho._address, mantissa(1), cTokenCollateral, a1);
-				await send(model, 'setRate', [bn(5e10)]);
+				await send(model, 'setRate', [swapFixedRate]);
 				/* lockedCollateral = notionalAmount * swapMinDuration * (swapFixedRate - minFloatRate);
 				 * 					= 70e18 * 345600 * (5e10 - 0) / 1e18 / 2e8 = 60.48e8
 				 * supplyAmount (50e8) < 60.48e8
 				 */
-				await expect(send(rho, 'open', [false, mantissa(70)], {from: a1})).rejects.toRevert('Insufficient protocol collateral');
+				await expect(send(rho, 'open', [userPayingFixed, mantissa(70), annualize(swapFixedRate)], {from: a1})).rejects.toRevert('Insufficient protocol collateral');
+			});
+
+			it('minimum swap size', async () => {
+				await prep(rho._address, mantissa(1), cTokenCollateral, a1);
+				await send(model, 'setRate', [swapFixedRate]);
+				await expect(send(rho, 'open', [userPayingFixed, mantissa(0.1), annualize(swapFixedRate)], {from: a1})).rejects.toRevert('Swap notional amount must exceed minimum');
+			});
+
+			it('pay fixed rate too high', async () => {
+				await prep(rho._address, mantissa(1), cTokenCollateral, a1);
+				await send(model, 'setRate', [4.9e10]);
+				await expect(send(rho, 'open', [userPayingFixed, mantissa(1), annualize(swapFixedRate)], {from: a1})).rejects.toRevert('The fixed rate Rho would pay is below user\'s limit');
 			});
 		});
 
@@ -348,7 +382,7 @@ describe('Protocol Unit Tests', () => {
 			beforeEach(async () => {
 				await prep(rho._address, mantissa(1), cTokenCollateral, a1);
 				await send(model, 'setRate', [swapFixedRate]);
-				openTx = await send(rho, 'open', [userPayingFixed, orderSize], {
+				openTx = await send(rho, 'open', [userPayingFixed, orderSize, annualize(swapFixedRate)], {
 					from: a1
 				});
 			});
@@ -431,7 +465,7 @@ describe('Protocol Unit Tests', () => {
 			it('should average interest rates', async () => {
 				await send(model, 'setRate', [2e10]);
 				await prep(rho._address, mantissa(1), cTokenCollateral, a2);
-				await send(rho, 'open', [userPayingFixed, orderSize], { from: a2 });
+				await send(rho, 'open', [userPayingFixed, orderSize, annualize(2e10)], { from: a2 });
 				expect(
 					await call(rho, 'avgFixedRatePayingMantissa', [])
 				).toEqNum(1.5e10);
@@ -452,7 +486,7 @@ describe('Protocol Unit Tests', () => {
 			await prep(rho._address, mantissa(1), cTokenCollateral, a1);
 			bal1 = await call(cTokenCollateral, 'balanceOf',[a1]);
 			await send(model, 'setRate', [rate]);
-			const tx0 = await send(rho, 'open', [true, orderSize], { from: a1 });
+			const tx0 = await send(rho, 'open', [true, orderSize, annualize(rate)], { from: a1 });
 			closeArgs = getCloseArgs(tx0);
 			await send(rho, 'advanceBlocks', [actualDuration]);
 			await send(mockCToken, 'setBorrowIndex', [benchmarkIndexClose]);
@@ -500,7 +534,7 @@ describe('Protocol Unit Tests', () => {
 			await prep(rho._address, mantissa(1), cTokenCollateral, a2);
 
 			await send(model, 'setRate', [bn(2e10)]);
-			await send(rho, 'open', [true, orderSize], { from: a2 });
+			await send(rho, 'open', [true, orderSize, annualize(bn(2e10))], { from: a2 });
 			await send(rho, 'close', closeArgs);
 
 			expect(
@@ -537,7 +571,7 @@ describe('Protocol Unit Tests', () => {
 			await prep(rho._address, mantissa(1), cTokenCollateral, a1);
 			bal1 = await call(cTokenCollateral, 'balanceOf',[a1]);
 			await send(model, 'setRate', [rate]);
-			const tx0 = await send(rho, 'open', [userPayingFixed, orderSize], { from: a1 });
+			const tx0 = await send(rho, 'open', [userPayingFixed, orderSize, annualize(rate)], { from: a1 });
 			closeArgs = getCloseArgs(tx0);
 			await send(rho, 'advanceBlocks', [actualDuration]);
 			await send(mockCToken, 'setBorrowIndex', [benchmarkIndexClose]);
@@ -584,7 +618,7 @@ describe('Protocol Unit Tests', () => {
 			await prep(rho._address, mantissa(1), cTokenCollateral, a2);
 
 			await send(model, 'setRate', [bn(2e10)]);
-			await send(rho, 'open', [userPayingFixed, orderSize], { from: a2 });
+			await send(rho, 'open', [userPayingFixed, orderSize, annualize(2e10)], { from: a2 });
 			await send(rho, 'close', closeArgs);
 
 			expect(
@@ -618,21 +652,30 @@ describe('Protocol Unit Tests', () => {
 			expect(await call(rho, 'interestRateModel',[])).toBe(model2._address);
 		});
 
-		it('should renounce admin', async () => {
-			await expect(send(rho, '_renounceAdmin',[], {from:a1})).rejects.toRevert('Must be admin to renounce admin');
-			await send(rho, '_renounceAdmin',[], {from:root});
+		it('should set collateral requirements', async () => {
+			await expect(send(rho, '_setCollateralRequirements',[0.5e10, 0.5e11], {from:a1})).rejects.toRevert('Must be admin to set collateral requirements');
+			await expect(send(rho, '_setCollateralRequirements',[1e12, 1e11], {from:root})).rejects.toRevert('Min float rate must be below max float rate');
+			// TODO test more reverts?
+			await send(rho, '_setCollateralRequirements',[0.5e10, 0.5e11], {from:root});
+			expect(await call(rho, 'minFloatRateMantissa',[])).toEqNum(0.5e10);
+			expect(await call(rho, 'maxFloatRateMantissa',[])).toEqNum(0.5e11);
+		});
+
+		it('should change admin', async () => {
+			await expect(send(rho, '_changeAdmin',[a2], {from:a1})).rejects.toRevert('Must be admin to change admin');
+			await send(rho, '_changeAdmin',[a2], {from:root});
 			const model2 = await deploy('MockInterestRateModel', []);
 			await expect(
-				send(rho, '_setInterestRateModel', [model2._address], {from: a1})
+				send(rho, '_setInterestRateModel', [model2._address], {from: root})
 			).rejects.toRevert('Must be admin to set interest rate model');
 		});
 
 		it('should set pause', async () => {
-			await expect(send(rho, '_setPause',[true], {from:a1})).rejects.toRevert('Must be admin to pause');
-			await send(rho, '_setPause',[true], {from:root});
+			await expect(send(rho, '_pause',[true], {from:a1})).rejects.toRevert('Must be admin to pause');
+			await send(rho, '_pause',[true], {from:root});
 			await prep(rho._address, mantissa(1), cTokenCollateral, lp);
 			await expect(send(rho, 'supply', [1], {from: lp})).rejects.toRevert("Market paused");
-			await expect(send(rho, 'open', [true, 1], {from: a1})).rejects.toRevert("Market paused");
+			await expect(send(rho, 'open', [true, 1, 0], {from: a1})).rejects.toRevert("Market paused");
 		});
 
 		it('should transfer comp', async () => {
@@ -642,5 +685,6 @@ describe('Protocol Unit Tests', () => {
 			const bal = await call(comp, 'balanceOf', [a2]);
 			expect(bal).toEqNum(mantissa(1));
 		});
+
 	});
 });

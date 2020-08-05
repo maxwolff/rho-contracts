@@ -16,6 +16,6 @@ contract MockInterestRateModel is InterestRateModelInterface {
 		orderNotional;
 		lockedCollateralUnderlying;
 		supplierLiquidityUnderlying;
-		return (mockRate, 0);
+		return (mockRate, 1);
 	}
 }

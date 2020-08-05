@@ -23,12 +23,17 @@ describe('InterestRateModel', () => {
 
 	// TODO XXXs
 
-	it('basic example', async() => {
+	it('basic userPayFixed', async() => {
 		await setup()
 		const res = await call(model, 'getSwapRate', [0, true, bn(1000e18), bn(50e18), bn(100e18)]);
-		// console.log(res, res.rateFactorNew);
-		// expect(res.rateFactorNew).toEqNum(.75e14);
-		// expect(bn(res.rate)).toAlmostEqual(bn(5.26060e16));
+		expect(res.rateFactorNew).toEqNum(7.5e14);
+		expect(bn(res.rate)).toAlmostEqual(bn(5.26060e16));
 	})
 
+	it('basic userReceiveFixed', async() => {
+		await setup()
+		const res = await call(model, 'getSwapRate', [0, false, bn(1000e18), bn(50e18), bn(100e18)]);
+		expect(res.rateFactorNew).toEqNum(-7.5e14);
+		expect(bn(res.rate)).toAlmostEqual(bn(5.23939e16));
+	})
 });

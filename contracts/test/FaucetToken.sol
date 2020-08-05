@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.6.10;
 
-import "../SafeMath.sol";
-import "../StandardToken.sol";
+import "./SafeMath.sol";
+import "./StandardToken.sol";
 
 contract FaucetToken is StandardToken {
     string public name;

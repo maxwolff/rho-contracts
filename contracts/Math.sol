@@ -1,16 +1,34 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.6.10;
 
-contract Math {
+contract Types {
 
-	uint constant EXP_SCALE = 1e18;
-
+    /*@dev A type to store amounts of cTokens, to make sure they are not confused with amounts of the underlying */
     struct CTokenAmount {
         uint val;
     }
 
-	struct Exp {
-    	uint mantissa;
+    /* @dev A type to store numbers scaled up by 18 decimals*/
+    struct Exp {
+        uint mantissa;
+    }
+}
+
+/* Always returns type of left side param */
+contract Math is Types {
+
+	uint constant EXP_SCALE = 1e18;
+
+    function _exp(uint num) pure internal returns (Exp memory) {
+    	return Exp({mantissa: num});
+    }
+
+    function _oneExp() pure internal returns (Exp memory) {
+        return Exp({mantissa: EXP_SCALE});
+    }
+
+    function _floor(int a) pure internal returns (uint) {
+        return a < 0 ? uint(0) : uint(a);
     }
 
     function _lt(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (bool) {
@@ -23,16 +41,6 @@ contract Math {
 
     function _gt(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (bool) {
         return a.val > b.val;
-    }
-
-	/* always returns type of left side param */
-
-    function _exp(uint num) pure internal returns (Exp memory) {
-    	return Exp({mantissa: num});
-    }
-
-    function _oneExp() pure internal returns (Exp memory) {
-        return Exp({mantissa: EXP_SCALE});
     }
 
     function _add(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
@@ -62,7 +70,6 @@ contract Math {
         return a - b;
     }
 
-    // unaudited
     function _sub(int a, uint b) pure internal returns (int) {
         int c = a - int(b);
         require(a >= c, "int - uint underflow");
@@ -73,10 +80,6 @@ contract Math {
         int c = a + int(b);
         require(a <= c, "int + uint overflow");
         return c;
-    }
-
-    function _toUint(int a) pure internal returns (uint) {
-        return a < 0 ? uint(0) : uint(a);
     }
 
     function _mul(uint a, CTokenAmount memory b) pure internal returns (uint) {

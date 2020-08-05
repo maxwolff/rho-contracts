@@ -37,7 +37,7 @@ contract InterestRateModel is InterestRateModelInterface {
 		range = range_;
 	}
 
-	/* @dev Calculates the interest rate to offer an incoming swap based on the rateFactor stored in Rho.sol.
+	/* @dev Calculates the per-block interest rate to offer an incoming swap based on the rateFactor stored in Rho.sol.
 	 * @param userPayingFixed : If the user is paying fixed in incoming swap
 	 * @param orderNotional : Notional order size of the incoming swap
 	 * @param lockedCollateralUnderlying : The amount of the protocol's liquidity that is locked at the time of the swap
@@ -53,10 +53,10 @@ contract InterestRateModel is InterestRateModelInterface {
 		int delta = int(div(mul(rateFactorSensitivity, orderNotional), supplierLiquidityUnderlying));
 		rateFactorNew = userPayingFixed ? rateFactorPrev + delta : rateFactorPrev - delta;
 
-		// range * rateFactor
+		// num = range * rateFactor
 		int num = mul(int(range), rateFactorNew);
 
-		// sqrt(rateFactor ^2 + slopeFactor)
+		// denom = sqrt(rateFactor ^2 + slopeFactor)
 		int inner = add(mul(rateFactorNew, rateFactorNew), int(slopeFactor));
 		int denom = sqrt(inner);
 
