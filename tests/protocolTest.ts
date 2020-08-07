@@ -26,13 +26,13 @@ const annualize = (interestPerBlock) => {
 }
 
 const deployProtocol = async (opts = {}) => {
-	const mockCToken = opts.benchmark || (await deploy('MockCToken', [INIT_EXCHANGE_RATE, '0', 'token1', '18', 'Benchmark Token']));
+	const benchmark = opts.benchmark || (await deploy('MockCToken', [INIT_EXCHANGE_RATE, '0', 'token1', '18', 'Benchmark Token']));
 	const cTokenCollateral = opts.collat || (await deploy('MockCToken', [INIT_EXCHANGE_RATE, '0', 'token2', '18', 'Collateral Token']));
 	const comp = await deploy('FaucetToken', ['0', 'COMP', '18', 'Compound Governance Token']);
 	const model = await deploy('MockInterestRateModel', []);
 	const rho = await deploy('MockRho', [
 		model._address,
-		mockCToken._address,
+		benchmark._address,
 		cTokenCollateral._address,
 		comp._address,
 		MIN_FLOAT_MANTISSA_PER_BLOCK,
@@ -42,7 +42,7 @@ const deployProtocol = async (opts = {}) => {
 		saddle.accounts[0]
 	]);
 	return {
-		mockCToken,
+		benchmark,
 		model,
 		cTokenCollateral,
 		rho,
@@ -62,16 +62,16 @@ describe('Constructor', () => {
 describe('Protocol Unit Tests', () => {
 	// root just deploys, has no actions with protocol
 	const [root, lp, a1, a2, ...accounts] = saddle.accounts;
-	let mockCToken, model, cTokenCollateral, rho, comp;
+	let benchmark, model, cTokenCollateral, rho, comp;
 	const supplyAmount = bn(1e18).div(INIT_EXCHANGE_RATE);//50e8
 	const block = 100;
 	const benchmarkIndexInit = mantissa(1.2);
 
 	beforeEach(async () => {
-		({ mockCToken, model, cTokenCollateral, rho, comp} = await deployProtocol());
+		({ benchmark, model, cTokenCollateral, rho, comp} = await deployProtocol());
 		await prep(rho._address, supplyAmount, cTokenCollateral, lp);
 		await send(rho, 'setBlockNumber', [block]);
-		await send(mockCToken, 'setBorrowIndex', [benchmarkIndexInit]);
+		await send(benchmark, 'setBorrowIndex', [benchmarkIndexInit]);
 		await send(rho, 'supply', [supplyAmount], {
 			from: lp,
 		});
@@ -124,7 +124,7 @@ describe('Protocol Unit Tests', () => {
 			await setup();
 			const closeArgs = getCloseArgs(openTx);
 			await send(rho, 'advanceBlocks', [actualDuration]);
-			await send(mockCToken, 'setBorrowIndex', [benchmarkIndexClose]);
+			await send(benchmark, 'setBorrowIndex', [benchmarkIndexClose]);
 			await send(rho, 'close', closeArgs);
 			/* floatLeg = 10e18 * (1.212 / 1.2 - 1) = 0.1e18
 			 * fixedLeg = 10e18 * 346000 * 1e10 / 1e18 = 0.0346e18
@@ -146,7 +146,7 @@ describe('Protocol Unit Tests', () => {
 		it('should succeed in removing liquidity early', async () => {
 			await setup();
 			await send(rho, 'advanceBlocks', [SUPPLY_MIN_DURATION]);
-			await send(mockCToken, 'setBorrowIndex', [mantissa(1.206)]);//0.5% interests, 6% annual
+			await send(benchmark, 'setBorrowIndex', [mantissa(1.206)]);//0.5% interests, 6% annual
 			// lockedCollateral = notionalAmount * swapMinDuration * (maxFloatRate - swapFixedRate);
 			// 	= 10e18 * 172800 * (1e11 - 1e10) / 1e18 / 2e8 = 7.776e8;
 			const {lockedCollateral, unlockedCollateral} = await call(rho, 'getSupplyCollateralState', []);
@@ -192,7 +192,8 @@ describe('Protocol Unit Tests', () => {
 		it('should revert if index decreases', async () => {
 			const delta = 10;
 			await send(rho, 'setBlockNumber', [block + delta]);
-			await send(mockCToken, 'setBorrowIndex', [mantissa(0.9)]);
+			await send(benchmark
+				, 'setBorrowIndex', [mantissa(0.9)]);
 			await expect(
 				send(rho, 'harnessAccrueInterest', [])
 			).rejects.toRevert('subtraction underflow');
@@ -200,7 +201,7 @@ describe('Protocol Unit Tests', () => {
 
 		it('should update benchmark index', async () => {
 			let newIdx = mantissa(2);
-			await send(mockCToken, 'setBorrowIndex', [newIdx]);
+			await send(benchmark, 'setBorrowIndex', [newIdx]);
 			await send(rho, 'advanceBlocks', [10]);
 			await send(rho, 'harnessAccrueInterest', []);
 			expect(newIdx).toEqNum(await call(rho, 'benchmarkIndexStored', []));
@@ -298,7 +299,7 @@ describe('Protocol Unit Tests', () => {
 				// accrue half the duration, or 172800 blocks
 				await send(rho, 'advanceBlocks', [SWAP_MIN_DURATION.div(2)]);
 				const benchmarkIdxNew = mantissa(1.203);
-				await send(mockCToken, 'setBorrowIndex', [benchmarkIdxNew]);
+				await send(benchmark, 'setBorrowIndex', [benchmarkIdxNew]);
 				await send(rho, 'harnessAccrueInterest', []);
 
 				expect(
@@ -427,7 +428,7 @@ describe('Protocol Unit Tests', () => {
 			it('should accrue interest on user pay fixed debt', async () => {
 				await send(rho, 'advanceBlocks', [SWAP_MIN_DURATION.div(2)]);
 				const benchmarkIdxNew = mantissa(1.203);
-				await send(mockCToken, 'setBorrowIndex', [benchmarkIdxNew]);
+				await send(benchmark, 'setBorrowIndex', [benchmarkIdxNew]);
 				await send(rho, 'harnessAccrueInterest', []);
 
 				expect(
@@ -489,7 +490,7 @@ describe('Protocol Unit Tests', () => {
 			const tx0 = await send(rho, 'open', [true, orderSize, annualize(rate)], { from: a1 });
 			closeArgs = getCloseArgs(tx0);
 			await send(rho, 'advanceBlocks', [actualDuration]);
-			await send(mockCToken, 'setBorrowIndex', [benchmarkIndexClose]);
+			await send(benchmark, 'setBorrowIndex', [benchmarkIndexClose]);
 		};
 
 		it('should close swap and profit protocol', async () => {
@@ -574,7 +575,7 @@ describe('Protocol Unit Tests', () => {
 			const tx0 = await send(rho, 'open', [userPayingFixed, orderSize, annualize(rate)], { from: a1 });
 			closeArgs = getCloseArgs(tx0);
 			await send(rho, 'advanceBlocks', [actualDuration]);
-			await send(mockCToken, 'setBorrowIndex', [benchmarkIndexClose]);
+			await send(benchmark, 'setBorrowIndex', [benchmarkIndexClose]);
 		};
 
 		it('should close swap and profit user', async () => {

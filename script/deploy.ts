@@ -11,7 +11,7 @@ const slopeFactor = bn(0.5e36);
 const rateFactorSensitivity = bn(0.000075e18);
 const feeBase = bn(0.001e18);
 const feeSensitivity = bn(0.003e18);
-const range = bn(0.1e18);
+const range = bn(0.5e18);
 
 
 /* PROVIDER="http://localhost:8545/" npx saddle -n development script deploy */
@@ -19,8 +19,10 @@ const range = bn(0.1e18);
 // **** LOCAL TEST DEPLOY **** //
 
 const deployProtocol = async (opts = {}) => {
-	const mockCToken = opts.benchmark || (await deploy('MockCToken', [INIT_EXCHANGE_RATE, '0', 'token1', '18', 'Benchmark Token']));
+	const benchmark = opts.benchmark || (await deploy('MockCToken', [INIT_EXCHANGE_RATE, '0', 'token1', '18', 'Benchmark Token']));
 	const cTokenCollateral = opts.collat || (await deploy('MockCToken', [INIT_EXCHANGE_RATE, '0', 'token2', '18', 'Collateral Token']));
+	const comp = await deploy('FaucetToken', ['0', 'COMP', '18', 'Compound Governance Token']);
+
 	const model = await deploy('InterestRateModel', [
 		yOffset,
 		slopeFactor,
@@ -31,13 +33,17 @@ const deployProtocol = async (opts = {}) => {
 	]);
 	const rho = await deploy('Rho', [
 		model._address,
-		mockCToken._address,
+		benchmark._address,
 		cTokenCollateral._address,
+		comp._address,
 		MIN_FLOAT_MANTISSA_PER_BLOCK,
 		MAX_FLOAT_MANTISSA_PER_BLOCK,
 		SWAP_MIN_DURATION,
-		SUPPLY_MIN_DURATION
+		SUPPLY_MIN_DURATION,
+		saddle.accounts[0]
 	]);
+
+	console.log({rho: rho._address, model: model._address, comp: comp._address})
 };
 
 (async () => {

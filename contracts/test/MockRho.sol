@@ -40,10 +40,6 @@ contract MockRho is Rho {
 		return blockNumber;
 	}
 
-	function setSupplyIndex(uint supplyIndex_) public returns (uint) {
-		supplyIndex = supplyIndex_;
-	}
-
 	function harnessAccrueInterest() public returns (CTokenAmount memory lockedCollateralNew){
 		return super.accrue();
 	}
