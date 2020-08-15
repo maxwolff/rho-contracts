@@ -27,7 +27,7 @@ expect.extend({
     }
   },
 
-  toAlmostEqual(expected, actual, precision=5) {
+  toAlmostEqual(expected, actual, precision=8) {
     const bnActual = new BigNumber(actual.toString()).toPrecision(precision);
     const bnExpected = new BigNumber(expected.toString()).toPrecision(
       precision

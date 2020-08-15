@@ -28,7 +28,7 @@ contract Math is Types {
     }
 
     function _floor(int a) pure internal returns (uint) {
-        return a < 0 ? uint(0) : uint(a);
+        return a > 0 ? uint(a) : 0;
     }
 
     function _lt(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (bool) {

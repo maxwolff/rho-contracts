@@ -1,0 +1,4 @@
+#!/bin/bash
+
+ABI=$(jq '.contracts["contracts/RhoLens.sol:RhoLens"].abi' .build/contracts.json)
+echo "$ABI" > ../rho-app/public/RhoLensABI.json

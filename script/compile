@@ -1,0 +1,22 @@
+#!/bin/bash
+
+set -eo pipefail
+
+root_dir="$(pwd)"
+cache_file="$root_dir/.solcache"
+
+checksum="$( ls ./contracts/{*,test/*}.sol| xargs shasum -p | shasum -p | cut -d' ' -f 1)"
+
+if [ -z "$rebuild" -a -f "$cache_file" ]; then
+  cached="$(cat $cache_file)"
+
+  if [ "$cached" == "$checksum" ]; then
+    echo "Skipping Contract Rebuild (set rebuild=true to force)"
+    exit 0
+  fi
+fi
+
+echo "Compiling Solidity contracts..."
+npx saddle compile
+
+echo "$checksum" > "$cache_file"
