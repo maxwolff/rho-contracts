@@ -13,10 +13,6 @@ const prep = async (spender, amount, token, who) => {
 	await send(token, "approve", [spender, amount], { from: who });
 };
 
-let print = (msg, src) => {
-	console.log(msg, require('util').inspect(src, false, null, true));
-};
-
 const getCloseArgs = (openTx) => {
 	const vals = openTx.events.OpenSwap.returnValues;
 	return [vals.userPayingFixed, vals.benchmarkIndexInit, vals.initBlock, vals.swapFixedRateMantissa, vals.notionalAmount, vals.userCollateralCTokens, vals.owner];
@@ -69,7 +65,7 @@ describe('Constructor', () => {
 describe('Protocol Integration Tests', () => {
 	const [root, lp, a1, a2, ...accounts] = saddle.accounts;
 	let benchmark, model, cTokenCollateral, rho, rhoLens, comp;
-	const supplyAmount = bn(100e18).div(INIT_EXCHANGE_RATE);//50e8
+	const supplyAmount = bn(100e18).div(INIT_EXCHANGE_RATE);
 	const block = 100;
 	const benchmarkIndexInit = mantissa(1.2);
 
@@ -127,10 +123,10 @@ describe('Protocol Unit Tests', () => {
 		});
 
 		it('should update account struct', async () => {
-			const acct = await call(rho, 'supplyAccounts', [lp]);
-			expect(acct.amount).toEqNum(supplyAmount);
-			expect(acct.lastBlock).toEqNum(block);
-			expect(acct.index).toEqNum(mantissa(1));
+			const {amount, lastBlock, index} = await call(rho, 'supplyAccounts', [lp]);
+			expect(amount).toEqNum(supplyAmount);
+			expect(lastBlock).toEqNum(block);
+			expect(index).toEqNum(mantissa(1));
 		});
 
 		it('should update globals', async () => {
@@ -140,9 +136,54 @@ describe('Protocol Unit Tests', () => {
 			);
 		});
 
-		it.todo('if second time, trues up');
+		it('should trues up on second supply', async () => {
+			// Prep a swap that increases the supply idx: same as closePayFixed/"should close swap and profit protocol"
 
-		it.todo('if previously fully withdrawn, correctly supply again');
+			const swapFixedRate = bn(3e10);
+			const orderSize = mantissa(10);
+			await prep(rho._address, mantissa(1), cTokenCollateral, a1);
+			await send(model, 'setRate', [swapFixedRate]);
+			const tx = await send(rho, 'open', [true,  orderSize, swapFixedRate], {
+				from: a1
+			});
+			await send(rho, 'advanceBlocks', [bn(SWAP_MIN_DURATION).add(400)]);
+			await send(benchmark, 'setBorrowIndex', [mantissa(1.212)]);
+			await send(rho, 'close', getCloseArgs(tx));
+			expect(await call(rho, 'supplyIndex', [])).toEqNum(1.0038e18);
+
+			await prep(rho._address, 10e8, cTokenCollateral, lp);
+			await send(rho, 'supply', [10e8], {
+				from: lp,
+			});
+
+			// 50e8 * 1.0038 + 10e8 = 60.19
+			let {amount, lastBlock, index} = await call(rho, 'supplyAccounts', [lp]);
+			expect(amount).toEqNum(60.19e8);
+			const blockNum = await call(rho, 'getBlockNumber', []);
+			expect(lastBlock).toEqNum(blockNum);
+			expect(index).toEqNum(1.0038e18);
+
+			// if previously fully withdrawn, should correctly supply again
+			await send(rho, 'setBlockNumber', [600000]);
+			await send(rho, 'remove', [-1], {from: lp});
+
+			({amount, lastBlock, index} = await call(rho, 'supplyAccounts', [lp]));
+			expect(amount).toEqNum(0);
+			expect(lastBlock).toEqNum(600000);
+			expect(index).toEqNum(1.0038e18);
+
+			await send(rho, 'setBlockNumber', [600001]);
+
+			await prep(rho._address, 10e8, cTokenCollateral, lp);
+			await send(rho, 'supply', [10e8], {
+				from: lp,
+			});
+
+			({amount, lastBlock, index} = await call(rho, 'supplyAccounts', [lp]));
+			expect(amount).toEqNum(10e8);
+			expect(lastBlock).toEqNum(600001);
+			expect(index).toEqNum(1.0038e18);
+		});
 	});
 
 	describe('Remove liquidity', () => {
@@ -243,15 +284,6 @@ describe('Protocol Unit Tests', () => {
 			await send(rho, 'harnessAccrueInterest', []);
 			expect(newIdx).toEqNum(await call(rho, 'benchmarkIndexStored', []));
 		});
-
-		it.todo(
-			'test locked collateral increases in accrue interest after open pay fixed swap'
-		);
-
-		/*
-		 * TODO: locked collateral min
-		 * total liquidity = 0
-		 */
 	});
 
 	describe('open user paying fixed', () => {
@@ -549,6 +581,7 @@ describe('Protocol Unit Tests', () => {
 			const userProfit = bal2.sub(bal1);
 			expect(userProfit).toEqNum(-0.19e8);
 			expect(await call(rho, 'supplierLiquidity', [])).toEqNum(supplyAmount.sub(userProfit));
+			expect(await call(rho, 'supplyIndex', [])).toEqNum(1.0038e18);
 		});
 
 
@@ -564,6 +597,7 @@ describe('Protocol Unit Tests', () => {
 			const userProfit = bal2.sub(bal1);
 			expect(userProfit).toEqNum(3.27e8);
 			expect(await call(rho, 'supplierLiquidity', [])).toEqNum(supplyAmount.sub(userProfit));
+			expect(await call(rho, 'supplyIndex', [])).toEqNum(0.9346e18);
 		});
 
 		// open swap, open second at end of first, close first.
@@ -633,6 +667,7 @@ describe('Protocol Unit Tests', () => {
 			const userProfit = bal2.sub(bal1);
 			expect(userProfit).toEqNum(0.19e8);
 			expect(await call(rho, 'supplierLiquidity', [])).toEqNum(supplyAmount.sub(userProfit));
+			expect(await call(rho, 'supplyIndex', [])).toEqNum(0.9962e18);
 		});
 
 
@@ -648,6 +683,7 @@ describe('Protocol Unit Tests', () => {
 			const userProfit = bal2.sub(bal1);
 			expect(userProfit).toEqNum(-3.27e8);
 			expect(await call(rho, 'supplierLiquidity', [])).toEqNum(supplyAmount.sub(userProfit));
+			expect(await call(rho, 'supplyIndex', [])).toEqNum(1.0654e18);
 		});
 
 		// open swap, open second at end of first, close first.

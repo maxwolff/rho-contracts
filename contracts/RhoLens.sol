@@ -15,29 +15,31 @@ contract RhoLensV1 is Math {
 	}
 
 	function getHypotheticalOrderInfo(bool userPayingFixed, uint notionalAmount) external view returns (uint swapFixedRateMantissa, uint userCollateralCTokens) {
-		(CTokenAmount memory lockedCollateral, CTokenAmount memory supplierLiquidity) = getSupplyCollateralState();
-		(Exp memory swapFixedRate,) = rho.getSwapRate(userPayingFixed, notionalAmount, lockedCollateral, supplierLiquidity);
+		(CTokenAmount memory lockedCollateral, CTokenAmount memory supplierLiquidity, Exp memory cTokenExchangeRate) = getSupplyCollateralState();
+		(Exp memory swapFixedRate,) = rho.getSwapRate(userPayingFixed, notionalAmount, lockedCollateral, supplierLiquidity, cTokenExchangeRate);
 
 		CTokenAmount memory userCollateral;
 		if (userPayingFixed) {
-			userCollateral = rho.getPayFixedInitCollateral(swapFixedRate, notionalAmount);
-			CTokenAmount memory lockedCollateralHypothetical = _add(lockedCollateral, rho.getReceiveFixedInitCollateral(swapFixedRate, notionalAmount));
+			userCollateral = rho.getPayFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate);
+			CTokenAmount memory lockedCollateralHypothetical = _add(lockedCollateral, rho.getReceiveFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
 			require(_lte(lockedCollateralHypothetical, supplierLiquidity), "Insufficient protocol collateral");
 		} else {
-			userCollateral = rho.getReceiveFixedInitCollateral(swapFixedRate, notionalAmount);
-			CTokenAmount memory lockedCollateralHypothetical = _add(lockedCollateral, rho.getPayFixedInitCollateral(swapFixedRate, notionalAmount));
+			userCollateral = rho.getReceiveFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate);
+			CTokenAmount memory lockedCollateralHypothetical = _add(lockedCollateral, rho.getPayFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
 			require(_lte(lockedCollateralHypothetical, supplierLiquidity), "Insufficient protocol collateral");
 		}
 		return (swapFixedRate.mantissa, userCollateral.val);
 	}
 
-	function getSupplyCollateralState() public view returns (CTokenAmount memory lockedCollateral, CTokenAmount memory supplierLiquidity) {
+	function getSupplyCollateralState() public view returns (CTokenAmount memory lockedCollateral, CTokenAmount memory supplierLiquidity, Exp memory cTokenExchangeRate) {
+		cTokenExchangeRate = rho.getExchangeRate();
+
 		uint accruedBlocks = rho.getBlockNumber() - rho.lastAccrualBlock();
-		(lockedCollateral,,) = rho.getLockedCollateral(accruedBlocks);
+		(lockedCollateral,,) = rho.getLockedCollateral(accruedBlocks, cTokenExchangeRate);
 
 		Exp memory benchmarkIndexRatio = _div(_exp(rho.getBenchmarkIndex()), _exp(rho.benchmarkIndexStored()));
-		Exp memory floatRate = _sub(benchmarkIndexRatio, _oneExp());
+		Exp memory floatRate = _sub(benchmarkIndexRatio, ONE_EXP);
 
-		supplierLiquidity = rho.getSupplierLiquidity(accruedBlocks, floatRate);
+		supplierLiquidity = rho.getSupplierLiquidity(accruedBlocks, floatRate, cTokenExchangeRate);
 	}
 }

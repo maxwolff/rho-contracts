@@ -6,12 +6,13 @@ const INIT_EXCHANGE_RATE = bn(2e8);
 const SWAP_MIN_DURATION = bn(345600);// 60 days in blocks, assuming 15s blocks
 const SUPPLY_MIN_DURATION = bn(172800);
 
-const yOffset = bn(0.05e18);
+const yOffset = bn(2.5e10);
 const slopeFactor = bn(0.5e36);
-const rateFactorSensitivity = bn(0.000075e18);
-const feeBase = bn(0.001e18);
-const feeSensitivity = bn(0.003e18);
-const range = bn(0.5e18);
+const range = bn(2.5e10);
+
+const rateFactorSensitivity = bn(7.5e13);
+const feeBase = bn(5e9);
+const feeSensitivity = bn(3e9);
 
 
 /* PROVIDER="http://localhost:8545/" npx saddle -n development script deploy */

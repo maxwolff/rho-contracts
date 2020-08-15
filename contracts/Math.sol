@@ -18,13 +18,10 @@ contract Types {
 contract Math is Types {
 
 	uint constant EXP_SCALE = 1e18;
+    Exp ONE_EXP = Exp({mantissa: EXP_SCALE});
 
     function _exp(uint num) pure internal returns (Exp memory) {
     	return Exp({mantissa: num});
-    }
-
-    function _oneExp() pure internal returns (Exp memory) {
-        return Exp({mantissa: EXP_SCALE});
     }
 
     function _floor(int a) pure internal returns (uint) {

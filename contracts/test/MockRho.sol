@@ -41,7 +41,7 @@ contract MockRho is Rho {
 	}
 
 	function harnessAccrueInterest() public returns (CTokenAmount memory lockedCollateralNew){
-		return super.accrue();
+		return accrue(getExchangeRate());
 	}
 
 	function advanceBlocks(uint blocks) public {
