@@ -341,8 +341,9 @@ describe('Protocol Unit Tests', () => {
 				 */
 				const {lockedCollateral, unlockedCollateral} = await call(rhoLens, 'getSupplyCollateralState', []);
 				expect(lockedCollateral.val).toEqNum(1.5552e8);
+
 				expect(
-					await call(rho, 'avgFixedRateReceivingMantissa', [])
+					await call(rho, 'avgFixedRateReceiving', [])
 				).toEqNum(swapFixedRate);
 				expect(await call(rho, 'notionalReceivingFixed', [])).toEqNum(
 					orderSize
@@ -372,7 +373,7 @@ describe('Protocol Unit Tests', () => {
 				await send(rho, 'harnessAccrueInterest', []);
 
 				expect(
-					await call(rho, 'avgFixedRateReceivingMantissa', [])
+					await call(rho, 'avgFixedRateReceiving', [])
 				).toEqNum(swapFixedRate);
 				expect(await call(rho, 'notionalReceivingFixed', [])).toEqNum(
 					orderSize
@@ -410,7 +411,7 @@ describe('Protocol Unit Tests', () => {
 				await prep(rho._address, mantissa(1), cTokenCollateral, a2);
 				await send(rho, 'open', [true, orderSize, 2e10], { from: a2 });
 				expect(
-					await call(rho, 'avgFixedRateReceivingMantissa', [])
+					await call(rho, 'avgFixedRateReceiving', [])
 				).toEqNum(1.5e10);
 			});
 		});
@@ -471,7 +472,7 @@ describe('Protocol Unit Tests', () => {
 				const {lockedCollateral} = await call(rhoLens, 'getSupplyCollateralState', []);
 				expect(lockedCollateral.val).toEqNum(0.1728e8);
 				expect(
-					await call(rho, 'avgFixedRatePayingMantissa', [])
+					await call(rho, 'avgFixedRatePaying', [])
 				).toEqNum(swapFixedRate);
 				expect(await call(rho, 'notionalPayingFixed', [])).toEqNum(
 					orderSize
@@ -501,7 +502,7 @@ describe('Protocol Unit Tests', () => {
 				await send(rho, 'harnessAccrueInterest', []);
 
 				expect(
-					await call(rho, 'avgFixedRatePayingMantissa', [])
+					await call(rho, 'avgFixedRatePaying', [])
 				).toEqNum(swapFixedRate);
 				expect(await call(rho, 'notionalPayingFixed', [])).toEqNum(
 					orderSize
@@ -537,7 +538,7 @@ describe('Protocol Unit Tests', () => {
 				await prep(rho._address, mantissa(1), cTokenCollateral, a2);
 				await send(rho, 'open', [userPayingFixed, orderSize, 2e10], { from: a2 });
 				expect(
-					await call(rho, 'avgFixedRatePayingMantissa', [])
+					await call(rho, 'avgFixedRatePaying', [])
 				).toEqNum(1.5e10);
 
 			});
@@ -567,7 +568,7 @@ describe('Protocol Unit Tests', () => {
 			await send(rho, 'close', closeArgs);
 
 			expect(
-				await call(rho, 'avgFixedRateReceivingMantissa', [])
+				await call(rho, 'avgFixedRateReceiving', [])
 			).toEqNum(0);
 			expect(await call(rho, 'notionalReceivingFixed', [])).toEqNum(0);
 			expect(await call(rho, 'notionalPayingFloat', [])).toEqNum(0);
@@ -610,7 +611,7 @@ describe('Protocol Unit Tests', () => {
 			await send(rho, 'close', closeArgs);
 
 			expect(
-				await call(rho, 'avgFixedRateReceivingMantissa', [])
+				await call(rho, 'avgFixedRateReceiving', [])
 			).toEqNum(2e10);
 			expect(await call(rho, 'notionalReceivingFixed', [])).toEqNum(
 				orderSize
@@ -654,7 +655,7 @@ describe('Protocol Unit Tests', () => {
 			await send(rho, 'close', closeArgs);
 
 			expect(
-				await call(rho, 'avgFixedRatePayingMantissa', [])
+				await call(rho, 'avgFixedRatePaying', [])
 			).toEqNum(0);
 			expect(await call(rho, 'notionalPayingFixed', [])).toEqNum(0);
 			expect(await call(rho, 'notionalReceivingFloat', [])).toEqNum(0);
@@ -696,7 +697,7 @@ describe('Protocol Unit Tests', () => {
 			await send(rho, 'close', closeArgs);
 
 			expect(
-				await call(rho, 'avgFixedRatePayingMantissa', [])
+				await call(rho, 'avgFixedRatePaying', [])
 			).toEqNum(2e10);
 			expect(await call(rho, 'notionalPayingFixed', [])).toEqNum(
 				orderSize
@@ -731,8 +732,8 @@ describe('Protocol Unit Tests', () => {
 			await expect(send(rho, '_setCollateralRequirements',[1e12, 1e11], {from:root})).rejects.toRevert('Min float rate must be below max float rate');
 			// TODO test more reverts?
 			await send(rho, '_setCollateralRequirements',[0.5e10, 0.5e11], {from:root});
-			expect(await call(rho, 'minFloatRateMantissa',[])).toEqNum(0.5e10);
-			expect(await call(rho, 'maxFloatRateMantissa',[])).toEqNum(0.5e11);
+			expect(await call(rho, 'minFloatRate',[])).toEqNum(0.5e10);
+			expect(await call(rho, 'maxFloatRate',[])).toEqNum(0.5e11);
 		});
 
 		it('should change admin', async () => {
