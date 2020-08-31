@@ -10,9 +10,8 @@ contract MockRho is Rho {
 
 	constructor (
 		InterestRateModelInterface interestRateModel_,
-		BenchmarkInterface benchmark_,
-		CTokenInterface cTokenCollateral_,
-		IERC20 rho_,
+		CTokenInterface cToken_,
+		CompInterface rho_,
 		uint minFloatRateMantissa_,
 		uint maxFloatRateMantissa_,
 		uint swapMinDuration_,
@@ -21,8 +20,7 @@ contract MockRho is Rho {
 	)
 		Rho(
 			interestRateModel_,
-			benchmark_,
-			cTokenCollateral_,
+			cToken_,
 			rho_,
 			minFloatRateMantissa_,
 			maxFloatRateMantissa_,
@@ -46,5 +44,13 @@ contract MockRho is Rho {
 
 	function advanceBlocks(uint blocks) public {
 		blockNumber = blockNumber + blocks;
+	}
+
+	function advanceBlocksProtocol(uint blocks) public {
+		advanceBlocks(blocks);
+
+		(bool worked, bytes memory _) = address(cToken).call(abi.encodeWithSignature("advanceBlocks(uint256)", blocks));
+		require(worked == true, "Advance blocks didnt work");
+		_;
 	}
 }

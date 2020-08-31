@@ -37,9 +37,22 @@ contract RhoLensV1 is Math {
 		uint accruedBlocks = rho.getBlockNumber() - rho.lastAccrualBlock();
 		(lockedCollateral,,) = rho.getLockedCollateral(accruedBlocks, cTokenExchangeRate);
 
-		Exp memory benchmarkIndexRatio = _div(_exp(rho.getBenchmarkIndex()), _exp(rho.benchmarkIndexStored()));
+		Exp memory benchmarkIndexRatio = _div(rho.getBenchmarkIndex(), _exp(rho.benchmarkIndexStored()));
 		Exp memory floatRate = _sub(benchmarkIndexRatio, ONE_EXP);
 
 		supplierLiquidity = rho.getSupplierLiquidity(accruedBlocks, floatRate, cTokenExchangeRate);
 	}
+
+	function toUnderlying(uint cTokenAmt) public view returns (uint underlyingAmount) {
+		Exp memory rate = rho.getExchangeRate();
+		CTokenAmount memory amount = CTokenAmount({val: cTokenAmt});
+		return rho.toUnderlying(amount, rate);
+	}
+
+	function toCTokens(uint underlyingAmount) public view returns (uint cTokenAmount) {
+		Exp memory rate = rho.getExchangeRate();
+		CTokenAmount memory amount = rho.toCTokens(underlyingAmount, rate);
+		return amount.val;
+	}
+
 }

@@ -1,0 +1,10 @@
+#!/bin/sh
+
+set -e
+export network="$1"
+
+mkdir -p networks
+npx saddle compile
+#calls ./deploy.ts
+echo $(npx saddle script deploy -n $network)
+

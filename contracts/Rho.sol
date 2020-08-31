@@ -5,17 +5,18 @@ pragma solidity ^0.6.10;
 import "./InterestRateModel.sol";
 import "./Math.sol";
 
-interface BenchmarkInterface {
-	function getBorrowIndex() external view returns (uint);
+interface CompInterface {
+    function transfer(address to, uint256 value) external returns (bool);
 }
 
-interface IERC20 {
-    function transfer(address recipient, uint256 amount) external returns (bool);
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
-}
+interface CTokenInterface {
+	function transferFrom(address from, address to, uint256 value) external returns (bool);
+    function transfer(address to, uint256 value) external returns (bool);
 
-abstract contract CTokenInterface is IERC20 {
-	function exchangeRateStored() external view virtual returns (uint);
+	function borrowIndex() external view returns (uint);
+	function accrualBlockNumber() external view returns(uint);
+	function borrowRatePerBlock() external view returns(uint);
+	function exchangeRateStored() external view returns (uint);
 }
 
 interface RhoInterface {
@@ -31,6 +32,32 @@ interface RhoInterface {
 		uint userCollateralCTokens,
 		address owner
 	) external;
+	event Supply(address supplier, uint cTokenSupplyAmount, uint newSupplyAmount);
+	event Remove(address supplier, uint removeCTokenAmount, uint newSupplyValue);
+	event OpenSwap(
+		bytes32 indexed txHash,
+		bool userPayingFixed,
+		uint benchmarkIndexInit,
+		uint initBlock,
+		uint swapFixedRateMantissa,
+		uint notionalAmount,
+		uint userCollateralCTokens,
+		address indexed owner
+	);
+	event CloseSwap(
+		bytes32 indexed swapHash,
+		address indexed owner,
+		uint userPayout,
+		uint benchmarkIndexInit,
+		uint benchmarkIndexStored
+	);
+	event Accrue(uint supplierLiquidityNew, uint lockedCollateralNew);
+	event SetInterestRateModel(address newModel, address oldModel);
+	event SetPause(bool isPaused);
+	event AdminRenounced();
+	event CompTransferred(address dest, uint amount);
+	event SetCollateralRequirements(uint minFloatRateMantissa, uint maxFloatRateMantissa);
+	event AdminChanged(address oldAdmin, address newAdmin);
 }
 
 /* Notes:
@@ -41,15 +68,14 @@ interface RhoInterface {
 contract Rho is RhoInterface, Math {
 
 	InterestRateModelInterface public interestRateModel;
-	CTokenInterface public immutable cTokenCollateral;
-	IERC20 public immutable comp;
-	BenchmarkInterface public benchmark;
+	CTokenInterface public immutable cToken;
+	CompInterface public immutable comp;
 
 	uint public immutable SWAP_MIN_DURATION;
 	uint public immutable SUPPLY_MIN_DURATION;
 
 	uint public lastAccrualBlock;
-	uint public benchmarkIndexStored;
+	Exp public benchmarkIndexStored;
 
 	/* Notional size of each leg, one adjusting for compounding and one static */
 	uint public notionalReceivingFixed;
@@ -98,38 +124,10 @@ contract Rho is RhoInterface, Math {
 		address owner;
 	}
 
-	event Supply(address supplier, uint cTokenSupplyAmount, uint newSupplyAmount);
-	event Remove(address supplier, uint removeCTokenAmount, uint newSupplyValue);
-	event OpenSwap(
-		bytes32 indexed txHash,
-		bool userPayingFixed,
-		uint benchmarkIndexInit,
-		uint initBlock,
-		uint swapFixedRateMantissa,
-		uint notionalAmount,
-		uint userCollateralCTokens,
-		address indexed owner
-	);
-	event CloseSwap(
-		bytes32 indexed swapHash,
-		address indexed owner,
-		uint userPayout,
-		uint benchmarkIndexStored
-	);
-	event Accrue(uint supplierLiquidityNew, uint lockedCollateralNew);
-
-	event SetInterestRateModel(address newModel, address oldModel);
-	event SetPause(bool isPaused);
-	event AdminRenounced();
-	event CompTransferred(address dest, uint amount);
-	event SetCollateralRequirements(uint minFloatRateMantissa, uint maxFloatRateMantissa);
-	event AdminChanged(address oldAdmin, address newAdmin);
-
 	constructor (
 		InterestRateModelInterface interestRateModel_,
-		BenchmarkInterface benchmark_,
-		CTokenInterface cTokenCollateral_,
-		IERC20 comp_,
+		CTokenInterface cToken_,
+		CompInterface comp_,
 		uint minFloatRateMantissa_,
 		uint maxFloatRateMantissa_,
 		uint swapMinDuration_,
@@ -141,8 +139,7 @@ contract Rho is RhoInterface, Math {
 		require(maxFloatRateMantissa_ > 1e10, "Max float rate below minimum");
 
 		interestRateModel = interestRateModel_;
-		benchmark = benchmark_;
-		cTokenCollateral = cTokenCollateral_;
+		cToken = cToken_;
 		comp = comp_;
 		minFloatRate = _exp(minFloatRateMantissa_);
 		maxFloatRate = _exp(maxFloatRateMantissa_);
@@ -151,11 +148,11 @@ contract Rho is RhoInterface, Math {
 		admin = admin_;
 
 		supplyIndex = ONE_EXP.mantissa;
-		benchmarkIndexStored = getBenchmarkIndex();
+		benchmarkIndexStored = _exp(cToken_.borrowIndex());
 		isPaused = false;
 	}
 
-	/* @dev Supplies liquidity to the protcol
+	/* @dev Supplies liquidity to the protocol. Become the counterparty for all swap traders, in return for fees.
 	 * @param cTokenSupplyAmount Amount to supply, in CTokens.
 	 */
 	function supply(uint cTokenSupplyAmount) public override {
@@ -187,8 +184,8 @@ contract Rho is RhoInterface, Math {
 		transferIn(msg.sender, supplyAmount);
 	}
 
-	/* @dev Removes liquidity from protocol. Can only perform after a waiting period from supplying, to prevent interest rate manipulation
-	 * @param removeCTokenAmount Amount of CTokens to remove. -1 removes all CTokens.
+	/* @dev Remove liquidity from protocol. Can only perform after a waiting period from supplying, to prevent interest rate manipulation
+	 * @param removeCTokenAmount Amount of CTokens to remove. 0 removes all CTokens.
 	 */
 	function remove(uint removeCTokenAmount) public override {
 		CTokenAmount memory removeAmount = CTokenAmount({val: removeCTokenAmount});
@@ -201,7 +198,7 @@ contract Rho is RhoInterface, Math {
 		CTokenAmount memory truedUpAccountValue = _div(_mul(account.amount, supplyIndex), account.index);
 
 		// Remove all liquidity
-		if (removeAmount.val == uint(-1)) {
+		if (removeAmount.val == 0) {
 			removeAmount = truedUpAccountValue;
 		}
 		require(_lte(removeAmount, truedUpAccountValue), "Trying to remove more than account value");
@@ -235,7 +232,6 @@ contract Rho is RhoInterface, Math {
 		Exp memory cTokenExchangeRate = getExchangeRate();
 		CTokenAmount memory lockedCollateral = accrue(cTokenExchangeRate);
 		(Exp memory swapFixedRate, int rateFactorNew) = getSwapRate(userPayingFixed, notionalAmount, lockedCollateral, supplierLiquidity, cTokenExchangeRate);
-
 		CTokenAmount memory userCollateralCTokens;
 		if (userPayingFixed) {
 			require(swapFixedRate.mantissa <= fixedRateLimitMantissa, "The fixed rate Rho would receive is above user's limit");
@@ -251,7 +247,7 @@ contract Rho is RhoInterface, Math {
 
 		swapHash = keccak256(abi.encode(
 			userPayingFixed,
-			benchmarkIndexStored,
+			benchmarkIndexStored.mantissa,
 			getBlockNumber(),
 			swapFixedRate.mantissa,
 			notionalAmount,
@@ -264,7 +260,7 @@ contract Rho is RhoInterface, Math {
 		emit OpenSwap(
 			swapHash,
 			userPayingFixed,
-			benchmarkIndexStored,
+			benchmarkIndexStored.mantissa,
 			getBlockNumber(),
 			swapFixedRate.mantissa,
 			notionalAmount,
@@ -322,7 +318,9 @@ contract Rho is RhoInterface, Math {
 		return userCollateralCTokens;
 	}
 
-	// @dev Closes a swap, takes params from Open event. Must be past the min swap duration. Float payment continues even if closed late.
+	/* @dev Closes an existing swap, after the min swap duration. Float payment continues even if closed late.
+	 * Takes params from Open event.
+	 */
 	function close(
 		bool userPayingFixed,
 		uint benchmarkInitIndex,
@@ -346,7 +344,7 @@ contract Rho is RhoInterface, Math {
 		uint swapDuration = _sub(getBlockNumber(), initBlock);
 		require(swapDuration >= SWAP_MIN_DURATION, "Premature close swap");
 		require(swaps[swapHash] == true, "No active swap found");
-		Exp memory benchmarkIndexRatio = _div(_exp(benchmarkIndexStored), _exp(benchmarkInitIndex));
+		Exp memory benchmarkIndexRatio = _div(benchmarkIndexStored, _exp(benchmarkInitIndex));
 
 		CTokenAmount memory userCollateral = CTokenAmount({val: userCollateralCTokens});
 		Exp memory swapFixedRate = _exp(swapFixedRateMantissa);
@@ -371,7 +369,7 @@ contract Rho is RhoInterface, Math {
 				cTokenExchangeRate
 			);
 		}
-		emit CloseSwap(swapHash, owner, userPayout.val, benchmarkIndexStored);
+		emit CloseSwap(swapHash, owner, userPayout.val, benchmarkIndexStored.mantissa, benchmarkIndexStored.mantissa);
 		swaps[swapHash] = false;
 		transferOut(owner, userPayout);
 	}
@@ -452,8 +450,10 @@ contract Rho is RhoInterface, Math {
 		return userPayout;
 	}
 
-	// @dev Apply interest rate payments and adjust collateral requirements as time passes.
-	// @return lockedCollateralNew : The amount of collateral the protocol needs to keep locked.
+	/* @dev Called internally at the beginning of external swap and liquidity provider functions.
+	 * Accounts for interest rate payments and adjust collateral requirements with the passage of time.
+	 * @return lockedCollateralNew : The amount of collateral the protocol needs to keep locked.
+	 */
 	function accrue(Exp memory cTokenExchangeRate) internal returns (CTokenAmount memory) {
 		uint accruedBlocks = getBlockNumber() - lastAccrualBlock;
 		(CTokenAmount memory lockedCollateralNew, int parBlocksReceivingFixedNew, int parBlocksPayingFixedNew) = getLockedCollateral(accruedBlocks, cTokenExchangeRate);
@@ -462,8 +462,8 @@ contract Rho is RhoInterface, Math {
 			return lockedCollateralNew;
 		}
 
-		uint benchmarkIndexNew = getBenchmarkIndex();
-		Exp memory benchmarkIndexRatio = _div(_exp(benchmarkIndexNew), _exp(benchmarkIndexStored));
+		Exp memory benchmarkIndexNew = getBenchmarkIndex();
+		Exp memory benchmarkIndexRatio = _div(benchmarkIndexNew, benchmarkIndexStored);
 		Exp memory floatRate = _sub(benchmarkIndexRatio, ONE_EXP);
 
 		CTokenAmount memory supplierLiquidityNew = getSupplierLiquidity(accruedBlocks, floatRate, cTokenExchangeRate);
@@ -497,28 +497,28 @@ contract Rho is RhoInterface, Math {
 
 	function transferIn(address from, CTokenAmount memory cTokenAmount) internal {
 		// TODO: Add more validation?
-		cTokenCollateral.transferFrom(from, address(this), cTokenAmount.val);
+		cToken.transferFrom(from, address(this), cTokenAmount.val);
 	}
 
 	function transferOut(address to, CTokenAmount memory cTokenAmount) internal {
-		cTokenCollateral.transfer(to, cTokenAmount.val);
+		cToken.transfer(to, cTokenAmount.val);
 	}
 
-	// ** INTERNAL PURE HELPERS ** //
+	// ** PUBLIC PURE HELPERS ** //
 
-	function toCTokens(uint amt, Exp memory cTokenExchangeRate) internal pure returns (CTokenAmount memory) {
-		uint cTokenAmount = _div(amt, cTokenExchangeRate);
+	function toCTokens(uint amount, Exp memory cTokenExchangeRate) public pure returns (CTokenAmount memory) {
+		uint cTokenAmount = _div(amount, cTokenExchangeRate);
 		return CTokenAmount({val: cTokenAmount});
 	}
 
-	function toUnderlying(CTokenAmount memory amt, Exp memory cTokenExchangeRate) internal pure returns (uint) {
-		return _mul(amt.val, cTokenExchangeRate);
+	function toUnderlying(CTokenAmount memory amount, Exp memory cTokenExchangeRate) public pure returns (uint) {
+		return _mul(amount.val, cTokenExchangeRate);
 	}
 
 	// *** PUBLIC VIEW GETTERS *** //
 
 	// @dev Calculate protocol locked collateral and parBlocks, which is a measure of the fixed rate credit/debt.
-	// * Use int to keep negatives, for correct late blocks calc when a single swap is outstanding
+	// * Uses int to keep negatives, for correct late blocks calc when a single swap is outstanding
 	function getLockedCollateral(uint accruedBlocks, Exp memory cTokenExchangeRate) public view returns (CTokenAmount memory lockedCollateral, int parBlocksReceivingFixedNew, int parBlocksPayingFixedNew) {
 		parBlocksReceivingFixedNew = _sub(parBlocksReceivingFixed, _mul(accruedBlocks, notionalReceivingFixed));
 		parBlocksPayingFixedNew = _sub(parBlocksPayingFixed, _mul(accruedBlocks, notionalPayingFixed));
@@ -586,14 +586,22 @@ contract Rho is RhoInterface, Math {
 		return toCTokens(amt, cTokenExchangeRate);
 	}
 
-	function getBenchmarkIndex() public view returns (uint) {
-		uint idx = benchmark.getBorrowIndex();
-		require(idx != 0, "Benchmark index is zero");
-		return idx;
+	function getBenchmarkIndex() public view returns (Exp memory) {
+		Exp memory borrowIndex = _exp(cToken.borrowIndex());
+		require(borrowIndex.mantissa != 0, "Benchmark index is zero");
+		uint blockDelta = _sub(getBlockNumber(), cToken.accrualBlockNumber());
+
+		if (blockDelta == 0) {
+			return borrowIndex;
+		} else {
+			Exp memory borrowRateMantissa = _exp(cToken.borrowRatePerBlock());
+			Exp memory simpleInterestFactor = _mul(borrowRateMantissa, blockDelta);
+			return _mul(borrowIndex, _add(simpleInterestFactor, ONE_EXP));
+		}
 	}
 
 	function getExchangeRate() public view returns (Exp memory) {
-		return _exp(cTokenCollateral.exchangeRateStored());
+		return _exp(cToken.exchangeRateStored());
 	}
 
 	function getBlockNumber() public view virtual returns (uint) {

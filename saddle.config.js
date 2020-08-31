@@ -82,6 +82,6 @@ module.exports = {
     }
   },
   scripts: {
-    'deploy': "script/deploy.ts"
+    "deploy": "script/deploy.ts"
   }
 }

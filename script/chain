@@ -1,0 +1,2 @@
+#!/bin/sh
+ganache-cli -m "dead fish racket soul plunger dirty boats cracker mammal nicholas cage" --account_keys_path 'keys.json'

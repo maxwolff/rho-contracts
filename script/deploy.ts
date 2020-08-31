@@ -1,52 +1,78 @@
-const { bn } = require('../tests/util/Helpers.ts');
+const fs = require('fs');
+const path = require('path');
+const util = require('util');
+const assert = require('assert');
+const exec = util.promisify(require('child_process').exec);
 
-const MIN_FLOAT_MANTISSA_PER_BLOCK = bn(0);
-const MAX_FLOAT_MANTISSA_PER_BLOCK = bn(1e11); // => 2.1024E17 per year via 2102400 blocks / year. ~21%, 3.5% (3.456E16) per 60 days (345600 blocks)
-const INIT_EXCHANGE_RATE = bn(2e8);
-const SWAP_MIN_DURATION = bn(345600);// 60 days in blocks, assuming 15s blocks
-const SUPPLY_MIN_DURATION = bn(172800);
+const { str } = require('../tests/util/Helpers.ts');
 
-const yOffset = bn(2.5e10);
-const slopeFactor = bn(0.5e36);
-const range = bn(2.5e10);
+const writeNetworkFile = async (network, value) => {
+    const networkFile = path.join('networks', `${network}.json`);
+	await util.promisify(fs.writeFile)(networkFile, JSON.stringify(value, null, 4));
+ };
 
-const rateFactorSensitivity = bn(7.5e13);
-const feeBase = bn(5e9);
-const feeSensitivity = bn(3e9);
-
-
-/* PROVIDER="http://localhost:8545/" npx saddle -n development script deploy */
-
-// **** LOCAL TEST DEPLOY **** //
-
-const deployProtocol = async (opts = {}) => {
-	const benchmark = opts.benchmark || (await deploy('MockCToken', [INIT_EXCHANGE_RATE, '0', 'token1', '18', 'Benchmark Token']));
-	const cTokenCollateral = opts.collat || (await deploy('MockCToken', [INIT_EXCHANGE_RATE, '0', 'token2', '18', 'Collateral Token']));
-	const comp = await deploy('FaucetToken', ['0', 'COMP', '18', 'Compound Governance Token']);
-
-	const model = await deploy('InterestRateModel', [
-		yOffset,
-		slopeFactor,
-		rateFactorSensitivity,
-		feeBase,
-		feeSensitivity,
-		range
-	]);
-	const rho = await deploy('Rho', [
-		model._address,
-		benchmark._address,
-		cTokenCollateral._address,
-		comp._address,
-		MIN_FLOAT_MANTISSA_PER_BLOCK,
-		MAX_FLOAT_MANTISSA_PER_BLOCK,
-		SWAP_MIN_DURATION,
-		SUPPLY_MIN_DURATION,
+const deployProtocol = async (conf) => {
+	const cToken = conf.cToken || (await deploy('MockCToken', [conf.initExchangeRate, conf.borrowRateMantissa, '0', 'token2', '18', 'Collateral Token']))._address;
+	const comp = conf.comp || (await deploy('FaucetToken', ['0', 'COMP', '18', 'Compound Governance Token']))._address;
+	const model = (await deploy('InterestRateModel', [
+		conf.yOffset,
+		conf.slopeFactor,
+		conf.rateFactorSensitivity,
+		conf.feeBase,
+		conf.feeSensitivity,
+		conf.range
+	]))._address;
+	const rho = (await deploy('Rho', [
+		model,
+		cToken,
+		comp,
+		conf.minFloatMantissaPerBlock,
+		conf.maxFloatMantissaPerBlock,
+		conf.swapMinDuration,
+		conf.supplyMinDuration,
 		saddle.accounts[0]
-	]);
+	]))._address;
 
-	console.log({rho: rho._address, model: model._address, comp: comp._address})
+	return {cToken, comp, model, rho};
 };
 
 (async () => {
-	await deployProtocol();
+	const mainnet = {
+		yOffset: str(2.5e10),
+		slopeFactor: str(0.5e36),
+		range: str(2.5e10),
+		rateFactorSensitivity: str(7.5e13),
+		feeBase: str(5e9),
+		feeSensitivity: str(3e9),
+
+		minFloatMantissaPerBlock: str(0),
+		maxFloatMantissaPerBlock: str(1e11),
+		initExchangeRate: str(2e8),
+		swapMinDuration: str(345600), // 60 days in blocks
+		supplyMinDuration: str(172800), // 60 days in blocks
+		comp: "0xc00e94cb662c3520282e6f5717214004a7f26888",
+		cToken: "0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643"// cdai
+	};
+
+	const conf = {
+		development: {
+			...mainnet,
+			initExchangeRate: str(2e8),
+			borrowRateMantissa: str(1e10),
+			comp: null,
+			cToken: null
+		},
+		// kovan: {
+			// ...mainnet,
+			// comp: "0x",
+			// benchmark: "0x"
+			// cTokenCollateral: "0x"
+		// },
+		// mainnet
+	}
+
+	const network = saddle.network_config.network;
+	assert(Object.keys(conf).includes(network), "Unsupported network");
+	const networkJson = await deployProtocol(conf[network]);
+	await writeNetworkFile(network, networkJson);
 })();

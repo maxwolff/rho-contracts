@@ -9,7 +9,8 @@ Run tests:
 * `yarn test`
 
 Deploy locally:
-* `PROVIDER="http://localhost:8545/" npx saddle -n development script deploy`
+* `ganache-cli` at port 8545
+* `script/deploy development`
 
 Resources:
 * [Spreadsheet](https://docs.google.com/spreadsheets/d/1w2EEdeKWvx7haG0p8vp5h9kBmOGBXVOpb6UTZOOV1io/edit#gid=27052314)

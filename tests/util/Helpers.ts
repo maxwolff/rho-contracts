@@ -6,6 +6,10 @@ const bn = num => {
 	return ethers.utils.bigNumberify(new BigNumber(num).toFixed());
 };
 
+const str = num => {
+	return bn(num).toHexString();
+};
+
 const mantissa = num => {
   return ethers.utils.bigNumberify(new BigNumber(num).times(1e18).toFixed());
 }
@@ -18,6 +22,7 @@ const hashEncode = (args) => {
 
 module.exports = {
 	bn,
+	str,
 	mantissa,
 	hashEncode
 };

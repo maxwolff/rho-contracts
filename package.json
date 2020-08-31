@@ -5,9 +5,8 @@
   },
   "scripts": {
     "test": "yarn compile && npx saddle test",
-    "compile": "./script/compile",
-    "exportABI": "./script/exportABI"
-},
+    "compile": "./script/compile"
+  },
   "resolutions": {
     "scrypt.js": "https://registry.npmjs.org/@compound-finance/ethereumjs-wallet/-/ethereumjs-wallet-0.6.3.tgz"
   },
