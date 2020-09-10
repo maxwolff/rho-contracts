@@ -2,39 +2,58 @@ const fs = require('fs');
 const path = require('path');
 const util = require('util');
 const assert = require('assert');
-const exec = util.promisify(require('child_process').exec);
-
-const { str } = require('../tests/util/Helpers.ts');
+const { str, sendRPC } = require('../tests/util/Helpers.ts');
 
 const writeNetworkFile = async (network, value) => {
     const networkFile = path.join('networks', `${network}.json`);
 	await util.promisify(fs.writeFile)(networkFile, JSON.stringify(value, null, 4));
  };
 
-const deployProtocol = async (conf) => {
-	const cToken = conf.cToken || (await deploy('MockCToken', [conf.initExchangeRate, conf.borrowRateMantissa, '0', 'token2', '18', 'Collateral Token']))._address;
-	const comp = conf.comp || (await deploy('FaucetToken', ['0', 'COMP', '18', 'Compound Governance Token']))._address;
-	const model = (await deploy('InterestRateModel', [
+const deployProtocol = async (conf, network) => {
+	const a1 = saddle.accounts[0];
+
+	if (network == 'development') {
+		await sendRPC('evm_mineBlockNumber', [100], saddle);
+		console.log(await sendRPC('eth_blockNumber', [], saddle));
+
+	}
+	let cToken;
+	if (conf.cToken) {
+		cToken = conf.cToken;
+	} else {
+		cToken = await deploy('MockCToken', [conf.initExchangeRate, conf.borrowRateMantissa, '0', 'token2', '18', 'Collateral Token']);
+	}
+	const comp = conf.comp || await deploy('FaucetToken', ['0', 'COMP', '18', 'Compound Governance Token']);
+	const model = await deploy('InterestRateModel', [
 		conf.yOffset,
 		conf.slopeFactor,
 		conf.rateFactorSensitivity,
 		conf.feeBase,
 		conf.feeSensitivity,
 		conf.range
-	]))._address;
-	const rho = (await deploy('Rho', [
-		model,
-		cToken,
-		comp,
+	]);
+	const rho = await deploy('Rho', [
+		model._address,
+		cToken._address,
+		comp._address,
 		conf.minFloatMantissaPerBlock,
 		conf.maxFloatMantissaPerBlock,
 		conf.swapMinDuration,
 		conf.supplyMinDuration,
-		saddle.accounts[0]
-	]))._address;
+		a1
+	]);
 
-	return {cToken, comp, model, rho};
+	const rhoLens = await deploy('RhoLensV1', [rho._address]);
+
+	if (network == 'development') {
+		await send(cToken, 'allocateTo', [a1, str(500e10)]);
+		await send(cToken, 'approve', [rho._address, str(500e10)], { from: a1 });
+		console.log(await send(rho, 'supply', [str(50e10)], {from: a1}));
+	}
+
+	return {'cToken': cToken._address, 'comp': comp._address, 'model': model._address, 'rho': rho._address, 'rhoLens': rhoLens._address};
 };
+
 
 (async () => {
 	const mainnet = {
@@ -73,6 +92,6 @@ const deployProtocol = async (conf) => {
 
 	const network = saddle.network_config.network;
 	assert(Object.keys(conf).includes(network), "Unsupported network");
-	const networkJson = await deployProtocol(conf[network]);
+	const networkJson = await deployProtocol(conf[network], network);
 	await writeNetworkFile(network, networkJson);
 })();

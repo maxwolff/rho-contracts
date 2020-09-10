@@ -35,7 +35,7 @@ interface RhoInterface {
 	event Supply(address supplier, uint cTokenSupplyAmount, uint newSupplyAmount);
 	event Remove(address supplier, uint removeCTokenAmount, uint newSupplyValue);
 	event OpenSwap(
-		bytes32 indexed txHash,
+		bytes32 indexed swapHash,
 		bool userPayingFixed,
 		uint benchmarkIndexInit,
 		uint initBlock,
@@ -560,14 +560,14 @@ contract Rho is RhoInterface, Math {
 		CTokenAmount memory supplierLiquidity_,
 		Exp memory cTokenExchangeRate
 	) public view returns (Exp memory, int) {
-		(uint rate, int rateFactorNew) = interestRateModel.getSwapRate(
+		(uint ratePerBlockMantissa, int rateFactorNew) = interestRateModel.getSwapRate(
 			rateFactor,
 			userPayingFixed,
 			orderNotional,
 			toUnderlying(lockedCollateral, cTokenExchangeRate),
 			toUnderlying(supplierLiquidity_, cTokenExchangeRate)
 		);
-		return (_exp(rate), rateFactorNew);
+		return (_exp(ratePerBlockMantissa), rateFactorNew);
 	}
 
 	// @dev The amount that must be locked up for the payFixed leg of a swap paying fixed. Used to calculate both the protocol and user's collateral.

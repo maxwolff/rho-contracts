@@ -9,7 +9,7 @@ Run tests:
 * `yarn test`
 
 Deploy locally:
-* `ganache-cli` at port 8545
+* `script/chain`
 * `script/deploy development`
 
 Resources:
