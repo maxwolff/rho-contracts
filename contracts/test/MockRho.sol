@@ -11,7 +11,7 @@ contract MockRho is Rho {
 	constructor (
 		InterestRateModelInterface interestRateModel_,
 		CTokenInterface cToken_,
-		CompInterface rho_,
+		CompInterface comp_,
 		uint minFloatRateMantissa_,
 		uint maxFloatRateMantissa_,
 		uint swapMinDuration_,
@@ -21,7 +21,7 @@ contract MockRho is Rho {
 		Rho(
 			interestRateModel_,
 			cToken_,
-			rho_,
+			comp_,
 			minFloatRateMantissa_,
 			maxFloatRateMantissa_,
 			swapMinDuration_,

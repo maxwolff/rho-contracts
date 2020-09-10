@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { str, bn } = require('../tests/util/Helpers.ts');
+const { str, bn, sendRPC } = require('../tests/util/Helpers.ts');
 const CTokenABI = require('../script/cTokenABI.js').abi;
 
 const deployProtocol = async (conf) => {
@@ -43,34 +43,10 @@ const getCloseArgs = (openTx) => {
 	return [vals.userPayingFixed, vals.benchmarkIndexInit, vals.initBlock, vals.swapFixedRateMantissa, vals.notionalAmount, vals.userCollateralCTokens, vals.owner];
 }
 
-const sendRPC = (method, params) => {
-  return new Promise((resolve, reject) => {
-    if (!saddle.web3.currentProvider || typeof (saddle.web3.currentProvider) === 'string') {
-      return reject(`cannot send from currentProvider=${saddle.web3.currentProvider}`);
-    }
-
-    saddle.web3.currentProvider.send(
-      {
-        jsonrpc: '2.0',
-        method: method,
-        params: params,
-        id: new Date().getTime()
-      },
-      (err, response) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(response);
-        }
-      }
-    );
-  });
-};
-
 const mineBlocks = async (amt) => {
-	let res = await sendRPC('eth_blockNumber', []);
+	let res = await sendRPC('eth_blockNumber', [], saddle);
 	let bn = parseInt(res.result);
-	await sendRPC('evm_mineBlockNumber', [bn + amt]);
+	await sendRPC('evm_mineBlockNumber', [bn + amt], saddle);
 };
 
 describe('Fork', () => {
@@ -106,7 +82,6 @@ describe('Fork', () => {
 		supplySize = await call(rhoLens, 'toCTokens', [supplySizeUnderlying]);
 		await approve(supplySize, lp);
 		await send(rho, 'supply', [supplySize], {from: lp});
-		await approve(bn(30e8), a1);
 	});
 
 	// rate begins at 4%, should increase with order size
@@ -124,8 +99,10 @@ describe('Fork', () => {
 		const {swapFixedRateMantissa, userCollateralCTokens} = await call(rhoLens, 'getHypotheticalOrderInfo', [false, orderSize]);
 		console.log(swapFixedRateMantissa, userCollateralCTokens);
 		console.log(await call(rhoLens, 'toUnderlying', [userCollateralCTokens]));
-
-		const openTx1 = await send(rho, 'open', [false, orderSize, bn(1e9)], {from: a1});
+		
+		await approve(bn(30e8), a1);
+		const openTx1 = await send(rho, 'openReceiveFixedSwap', [orderSize, bn(1e9)], {from: a1});
+		console.log(openTx1.events.OpenSwap.returnValues);
 		console.log(await call(rho, 'rateFactor', []));
 
 		await mineBlocks(345601);

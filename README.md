@@ -8,8 +8,13 @@ Run tests:
 * `yarn`
 * `yarn test`
 
+Run fork test:
+* node script/infuraProxy.js
+* script/forkChain
+* script/forkTest
+
 Deploy locally:
-* `ganache-cli` at port 8545
+* `script/chain`
 * `script/deploy development`
 
 Resources:

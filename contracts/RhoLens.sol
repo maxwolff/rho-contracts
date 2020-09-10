@@ -14,21 +14,25 @@ contract RhoLensV1 is Math {
 		rho = rho_;
 	}
 
-	function getHypotheticalOrderInfo(bool userPayingFixed, uint notionalAmount) external view returns (uint swapFixedRateMantissa, uint userCollateralCTokens) {
+	function getHypotheticalOrderInfo(bool userPayingFixed, uint notionalAmount) external view returns (uint swapFixedRateMantissa, uint userCollateralCTokens, bool protocolIsCollateralized) {
 		(CTokenAmount memory lockedCollateral, CTokenAmount memory supplierLiquidity, Exp memory cTokenExchangeRate) = getSupplyCollateralState();
 		(Exp memory swapFixedRate,) = rho.getSwapRate(userPayingFixed, notionalAmount, lockedCollateral, supplierLiquidity, cTokenExchangeRate);
-
+		bool protocolIsCollateralized = true;
 		CTokenAmount memory userCollateral;
 		if (userPayingFixed) {
 			userCollateral = rho.getPayFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate);
 			CTokenAmount memory lockedCollateralHypothetical = _add(lockedCollateral, rho.getReceiveFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
-			require(_lte(lockedCollateralHypothetical, supplierLiquidity), "Insufficient protocol collateral");
+			if (_gte(lockedCollateralHypothetical, supplierLiquidity)) {
+				protocolIsCollateralized = false;
+			}
 		} else {
 			userCollateral = rho.getReceiveFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate);
 			CTokenAmount memory lockedCollateralHypothetical = _add(lockedCollateral, rho.getPayFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
-			require(_lte(lockedCollateralHypothetical, supplierLiquidity), "Insufficient protocol collateral");
+			if(_gte(lockedCollateralHypothetical, supplierLiquidity)) {
+				protocolIsCollateralized = false;
+			}
 		}
-		return (swapFixedRate.mantissa, userCollateral.val);
+		return (swapFixedRate.mantissa, userCollateral.val, protocolIsCollateralized);
 	}
 
 	function getSupplyCollateralState() public view returns (CTokenAmount memory lockedCollateral, CTokenAmount memory supplierLiquidity, Exp memory cTokenExchangeRate) {

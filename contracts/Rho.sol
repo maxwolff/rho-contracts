@@ -22,7 +22,8 @@ interface CTokenInterface {
 interface RhoInterface {
 	function supply(uint cTokenSupplyAmount) external;
 	function remove(uint removeCTokenAmount) external;
-	function open(bool userPayingFixed, uint notionalAmount, uint fixedRateLimitMantissa) external returns (bytes32 swapHash);
+	function openPayFixedSwap(uint notionalAmount, uint maximumFixedRateMantissa) external returns (bytes32 swapHash);
+	function openReceiveFixedSwap(uint notionalAmount, uint minFixedRateMantissa) external returns (bytes32 swapHash);
 	function close(
 		bool userPayingFixed,
 		uint benchmarkInitIndex,
@@ -32,10 +33,10 @@ interface RhoInterface {
 		uint userCollateralCTokens,
 		address owner
 	) external;
-	event Supply(address supplier, uint cTokenSupplyAmount, uint newSupplyAmount);
-	event Remove(address supplier, uint removeCTokenAmount, uint newSupplyValue);
+	event Supply(address indexed supplier, uint cTokenSupplyAmount, uint newSupplyAmount);
+	event Remove(address indexed supplier, uint removeCTokenAmount, uint newSupplyValue);
 	event OpenSwap(
-		bytes32 indexed txHash,
+		bytes32 indexed swapHash,
 		bool userPayingFixed,
 		uint benchmarkIndexInit,
 		uint initBlock,
@@ -220,13 +221,21 @@ contract Rho is RhoInterface, Math {
 		transferOut(msg.sender, removeAmount);
 	}
 
+	function openPayFixedSwap(uint notionalAmount, uint maximumFixedRateMantissa) public override returns(bytes32 swapHash) {
+		return openInternal(true, notionalAmount, maximumFixedRateMantissa);
+	}
+
+	function openReceiveFixedSwap(uint notionalAmount, uint minFixedRateMantissa) public override returns(bytes32 swapHash) {
+		return openInternal(false, notionalAmount, minFixedRateMantissa);
+	}
+
 	/* @dev Opens a new interest rate swap
 	 * @param userPayingFixed : The user can choose if they want to receive fixed or pay fixed (the protocol will take the opposite side)
 	 * @param notionalAmount : The principal that interest rate payments will be based on
 	 * @param fixedRateLimitMantissa : The maximum (if payingFixed) or minimum (if receivingFixed) rate the swap should succeed at. Prevents frontrunning attacks.
 	 	* The amount of interest to pay over 2,102,400 blocks (~1 year), with 18 decimals of precision. Eg: 5% per block-year => 0.5e18.
 	*/
-	function open(bool userPayingFixed, uint notionalAmount, uint fixedRateLimitMantissa) public override returns (bytes32 swapHash) {
+	function openInternal(bool userPayingFixed, uint notionalAmount, uint fixedRateLimitMantissa) internal returns (bytes32 swapHash) {
 		require(isPaused == false, "Market paused");
 		require(notionalAmount >= 1e18, "Swap notional amount must exceed minimum");
 		Exp memory cTokenExchangeRate = getExchangeRate();
@@ -455,6 +464,7 @@ contract Rho is RhoInterface, Math {
 	 * @return lockedCollateralNew : The amount of collateral the protocol needs to keep locked.
 	 */
 	function accrue(Exp memory cTokenExchangeRate) internal returns (CTokenAmount memory) {
+		require(getBlockNumber() >= lastAccrualBlock, "Block number decreasing");
 		uint accruedBlocks = getBlockNumber() - lastAccrualBlock;
 		(CTokenAmount memory lockedCollateralNew, int parBlocksReceivingFixedNew, int parBlocksPayingFixedNew) = getLockedCollateral(accruedBlocks, cTokenExchangeRate);
 
@@ -497,11 +507,11 @@ contract Rho is RhoInterface, Math {
 
 	function transferIn(address from, CTokenAmount memory cTokenAmount) internal {
 		// TODO: Add more validation?
-		cToken.transferFrom(from, address(this), cTokenAmount.val);
+		require(cToken.transferFrom(from, address(this), cTokenAmount.val) == true, "Transfer In Failed");
 	}
 
 	function transferOut(address to, CTokenAmount memory cTokenAmount) internal {
-		cToken.transfer(to, cTokenAmount.val);
+		require(cToken.transfer(to, cTokenAmount.val), "Transfer Out failed");
 	}
 
 	// ** PUBLIC PURE HELPERS ** //
@@ -560,14 +570,14 @@ contract Rho is RhoInterface, Math {
 		CTokenAmount memory supplierLiquidity_,
 		Exp memory cTokenExchangeRate
 	) public view returns (Exp memory, int) {
-		(uint rate, int rateFactorNew) = interestRateModel.getSwapRate(
+		(uint ratePerBlockMantissa, int rateFactorNew) = interestRateModel.getSwapRate(
 			rateFactor,
 			userPayingFixed,
 			orderNotional,
 			toUnderlying(lockedCollateral, cTokenExchangeRate),
 			toUnderlying(supplierLiquidity_, cTokenExchangeRate)
 		);
-		return (_exp(rate), rateFactorNew);
+		return (_exp(ratePerBlockMantissa), rateFactorNew);
 	}
 
 	// @dev The amount that must be locked up for the payFixed leg of a swap paying fixed. Used to calculate both the protocol and user's collateral.
@@ -589,6 +599,7 @@ contract Rho is RhoInterface, Math {
 	function getBenchmarkIndex() public view returns (Exp memory) {
 		Exp memory borrowIndex = _exp(cToken.borrowIndex());
 		require(borrowIndex.mantissa != 0, "Benchmark index is zero");
+		require(getBlockNumber() >= cToken.accrualBlockNumber(), "Bn decreasing");
 		uint blockDelta = _sub(getBlockNumber(), cToken.accrualBlockNumber());
 
 		if (blockDelta == 0) {

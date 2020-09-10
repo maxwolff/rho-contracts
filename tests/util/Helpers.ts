@@ -20,9 +20,34 @@ const hashEncode = (args) => {
 	return web3.utils.keccak256(str);
 }
 
+const sendRPC = (method, params, saddle) => {
+  return new Promise((resolve, reject) => {
+    if (!saddle.web3.currentProvider || typeof (saddle.web3.currentProvider) === 'string') {
+      return reject(`cannot send from currentProvider=${saddle.web3.currentProvider}`);
+    }
+
+    saddle.web3.currentProvider.send(
+      {
+        jsonrpc: '2.0',
+        method: method,
+        params: params,
+        id: new Date().getTime()
+      },
+      (err, response) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(response);
+        }
+      }
+    );
+  });
+};
+
 module.exports = {
 	bn,
 	str,
 	mantissa,
-	hashEncode
+	hashEncode,
+	sendRPC
 };
