@@ -37,6 +37,10 @@ contract MockCToken is FaucetToken, MockCTokenInterface {
 		borrowIndex = borrowIndex_;
 	}
 
+	function setAccrualBlockNumber(uint bn) public {
+		accrualBlockNumber = bn;
+	}
+
 	function advanceBlocks(uint blocks) public {
 		accrualBlockNumber += blocks;
 	}

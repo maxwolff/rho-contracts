@@ -8,6 +8,11 @@ Run tests:
 * `yarn`
 * `yarn test`
 
+Run fork test:
+* node script/infuraProxy.js
+* script/forkChain
+* script/forkTest
+
 Deploy locally:
 * `script/chain`
 * `script/deploy development`
