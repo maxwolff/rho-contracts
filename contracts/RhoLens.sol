@@ -14,25 +14,25 @@ contract RhoLensV1 is Math {
 		rho = rho_;
 	}
 
-	function getHypotheticalOrderInfo(bool userPayingFixed, uint notionalAmount) external view returns (uint swapFixedRateMantissa, uint userCollateralCTokens, bool protocolIsCollateralized) {
+	function getHypotheticalOrderInfo(bool userPayingFixed, uint notionalAmount) external view returns (uint swapFixedRateMantissa, uint userCollateralCTokens, uint userCollateralUnderlying, bool protocolIsCollateralized) {
 		(CTokenAmount memory lockedCollateral, CTokenAmount memory supplierLiquidity, Exp memory cTokenExchangeRate) = getSupplyCollateralState();
 		(Exp memory swapFixedRate,) = rho.getSwapRate(userPayingFixed, notionalAmount, lockedCollateral, supplierLiquidity, cTokenExchangeRate);
-		bool protocolIsCollateralized = true;
+		protocolIsCollateralized = true;
 		CTokenAmount memory userCollateral;
 		if (userPayingFixed) {
 			userCollateral = rho.getPayFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate);
 			CTokenAmount memory lockedCollateralHypothetical = _add(lockedCollateral, rho.getReceiveFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
-			if (_gte(lockedCollateralHypothetical, supplierLiquidity)) {
+			if (_gt(lockedCollateralHypothetical, supplierLiquidity)) {
 				protocolIsCollateralized = false;
 			}
 		} else {
 			userCollateral = rho.getReceiveFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate);
 			CTokenAmount memory lockedCollateralHypothetical = _add(lockedCollateral, rho.getPayFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
-			if(_gte(lockedCollateralHypothetical, supplierLiquidity)) {
+			if(_gt(lockedCollateralHypothetical, supplierLiquidity)) {
 				protocolIsCollateralized = false;
 			}
 		}
-		return (swapFixedRate.mantissa, userCollateral.val, protocolIsCollateralized);
+		return (swapFixedRate.mantissa, userCollateral.val, toUnderlying(userCollateral.val), protocolIsCollateralized);
 	}
 
 	function getSupplyCollateralState() public view returns (CTokenAmount memory lockedCollateral, CTokenAmount memory supplierLiquidity, Exp memory cTokenExchangeRate) {
