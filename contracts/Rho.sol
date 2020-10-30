@@ -26,7 +26,7 @@ interface RhoInterface {
 	function openReceiveFixedSwap(uint notionalAmount, uint minFixedRateMantissa) external returns (bytes32 swapHash);
 	function close(
 		bool userPayingFixed,
-		uint benchmarkInitIndex,
+		uint benchmarkIndexInit,
 		uint initBlock,
 		uint swapFixedRateMantissa,
 		uint notionalAmount,
@@ -49,8 +49,7 @@ interface RhoInterface {
 		bytes32 indexed swapHash,
 		address indexed owner,
 		uint userPayout,
-		uint benchmarkIndexInit,
-		uint benchmarkIndexStored
+		uint benchmarkIndexFinal
 	);
 	event Accrue(uint supplierLiquidityNew, uint lockedCollateralNew);
 	event SetInterestRateModel(address newModel, address oldModel);
@@ -332,7 +331,7 @@ contract Rho is RhoInterface, Math {
 	 */
 	function close(
 		bool userPayingFixed,
-		uint benchmarkInitIndex,
+		uint benchmarkIndexInit,
 		uint initBlock,
 		uint swapFixedRateMantissa,
 		uint notionalAmount,
@@ -343,7 +342,7 @@ contract Rho is RhoInterface, Math {
 		accrue(cTokenExchangeRate);
 		bytes32 swapHash = keccak256(abi.encode(
 			userPayingFixed,
-			benchmarkInitIndex,
+			benchmarkIndexInit,
 			initBlock,
 			swapFixedRateMantissa,
 			notionalAmount,
@@ -353,7 +352,7 @@ contract Rho is RhoInterface, Math {
 		uint swapDuration = _sub(getBlockNumber(), initBlock);
 		require(swapDuration >= SWAP_MIN_DURATION, "Premature close swap");
 		require(swaps[swapHash] == true, "No active swap found");
-		Exp memory benchmarkIndexRatio = _div(benchmarkIndexStored, _exp(benchmarkInitIndex));
+		Exp memory benchmarkIndexRatio = _div(benchmarkIndexStored, _exp(benchmarkIndexInit));
 
 		CTokenAmount memory userCollateral = CTokenAmount({val: userCollateralCTokens});
 		Exp memory swapFixedRate = _exp(swapFixedRateMantissa);
@@ -378,7 +377,7 @@ contract Rho is RhoInterface, Math {
 				cTokenExchangeRate
 			);
 		}
-		emit CloseSwap(swapHash, owner, userPayout.val, benchmarkIndexStored.mantissa, benchmarkIndexStored.mantissa);
+		emit CloseSwap(swapHash, owner, userPayout.val, benchmarkIndexStored.mantissa);
 		swaps[swapHash] = false;
 		transferOut(owner, userPayout);
 	}
