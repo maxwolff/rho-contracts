@@ -58,6 +58,14 @@ contract Math is Types {
         return Exp({mantissa: _sub(a.mantissa, b.mantissa)});
     }
 
+    function _subToZero(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (CTokenAmount memory) {
+        if (b.val >= a.val) {
+            return CTokenAmount({val: 0});
+        } else {
+            return _sub(a,b);
+        }
+    }
+
     function _sub(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (CTokenAmount memory) {
         return CTokenAmount({val: _sub(a.val, b.val)});
     }

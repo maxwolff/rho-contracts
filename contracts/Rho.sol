@@ -557,8 +557,10 @@ contract Rho is RhoInterface, Math {
 		uint floatReceived = _mul(notionalReceivingFloat, floatRate);
 		uint fixedPaid = _mul(accruedBlocks, _mul(notionalPayingFixed, avgFixedRatePaying));
 		uint fixedReceived = _mul(accruedBlocks, _mul(notionalReceivingFixed, avgFixedRateReceiving));
-		// TODO: safely handle supplierLiquidity going negative?
-		supplierLiquidityNew = _sub(_add(supplierLiquidity, toCTokens(_add(fixedReceived, floatReceived), cTokenExchangeRate)), toCTokens(_add(fixedPaid, floatPaid), cTokenExchangeRate));
+
+		CTokenAmount memory rec = toCTokens(_add(fixedReceived, floatReceived), cTokenExchangeRate);
+		CTokenAmount memory paid = toCTokens(_add(fixedPaid, floatPaid), cTokenExchangeRate);
+		supplierLiquidityNew = _subToZero(_add(supplierLiquidity, rec), paid);
 	}
 
 	// @dev Get the rate for incoming swaps
@@ -598,8 +600,9 @@ contract Rho is RhoInterface, Math {
 	function getBenchmarkIndex() public view returns (Exp memory) {
 		Exp memory borrowIndex = _exp(cToken.borrowIndex());
 		require(borrowIndex.mantissa != 0, "Benchmark index is zero");
-		require(getBlockNumber() >= cToken.accrualBlockNumber(), "Bn decreasing");
-		uint blockDelta = _sub(getBlockNumber(), cToken.accrualBlockNumber());
+		uint accrualBlockNumber = cToken.accrualBlockNumber();
+		require(getBlockNumber() >= accrualBlockNumber, "Bn decreasing");
+		uint blockDelta = _sub(getBlockNumber(), accrualBlockNumber);
 
 		if (blockDelta == 0) {
 			return borrowIndex;
