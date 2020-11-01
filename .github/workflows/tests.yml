@@ -1,0 +1,37 @@
+name: Tests
+
+# Run this workflow every time a new commit pushed to your repository
+on: push
+
+jobs:
+  # Set the job key. The key is displayed as the job name
+  # when a job name is not provided
+  tests:
+    # Name the Job
+    name: Smart contract tests
+    # Set the type of machine to run on
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [12.x]
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Use Node.js
+      uses: actions/setup-node@v1
+      with:
+        node-version: '12.x'
+    - uses: actions/cache@v2
+      with:
+      path: '**/node_modules'
+      key: ${{ runner.os }}-modules-${{ hashFiles('**/yarn.lock') }}
+    - name: Install dependencies
+      run: yarn install
+    - name: Install solc
+      run: 
+        |
+          sudo wget https://github.com/ethereum/solidity/releases/download/v0.6.10/solc-static-linux -O /usr/local/bin/solc
+          sudo chmod +x /usr/local/bin/solc
+    - name: Run tests
+      run: yarn test
