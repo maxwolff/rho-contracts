@@ -566,7 +566,7 @@ describe('Protocol Unit Tests', () => {
 
 			expect(
 				await call(rho, 'avgFixedRateReceiving', [])
-			).toEqNum(121230);
+			).toEqNum(0);
 			expect(await call(rho, 'notionalReceivingFixed', [])).toEqNum(0);
 			expect(await call(rho, 'notionalPayingFloat', [])).toEqNum(0);
 
