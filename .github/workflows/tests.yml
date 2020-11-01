@@ -24,8 +24,9 @@ jobs:
         node-version: '12.x'
     - uses: actions/cache@v2
       with:
-      path: '**/node_modules'
-      key: ${{ runner.os }}-modules-${{ hashFiles('**/yarn.lock') }}
+        path: '**/node_modules'
+        key: ${{ runner.os }}-modules-${{ hashFiles('**/yarn.lock') }}
+
     - name: Install dependencies
       run: yarn install
     - name: Install solc
