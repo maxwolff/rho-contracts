@@ -5,27 +5,27 @@ contract Types {
 
     /*@dev A type to store amounts of cTokens, to make sure they are not confused with amounts of the underlying */
     struct CTokenAmount {
-        uint val;
+        uint128 val;
     }
 
     /* @dev A type to store numbers scaled up by 18 decimals*/
     struct Exp {
-        uint mantissa;
+        uint128 mantissa;
     }
 }
 
 /* Always returns type of left side param */
 contract Math is Types {
 
-	uint constant EXP_SCALE = 1e18;
+	uint128 constant EXP_SCALE = 1e18;
     Exp ONE_EXP = Exp({mantissa: EXP_SCALE});
 
-    function _exp(uint num) pure internal returns (Exp memory) {
+    function _exp(uint128 num) pure internal returns (Exp memory) {
     	return Exp({mantissa: num});
     }
 
-    function _floor(int a) pure internal returns (uint) {
-        return a > 0 ? uint(a) : 0;
+    function _floor(int128 a) pure internal returns (uint128) {
+        return a > 0 ? uint128(a) : 0;
     }
 
     function _lt(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (bool) {
@@ -48,8 +48,8 @@ contract Math is Types {
         return CTokenAmount({val: _add(a.val, b.val)});
     }
 
-    function _add(uint a, uint b) pure internal returns (uint) {
-        uint c = a + b;
+    function _add(uint128 a, uint128 b) pure internal returns (uint128) {
+        uint128 c = a + b;
         require(c >= a, "addition overflow");
         return c;
     }
@@ -70,28 +70,28 @@ contract Math is Types {
         return CTokenAmount({val: _sub(a.val, b.val)});
     }
 
-    function _sub(uint a, uint b) pure internal returns (uint) {
+    function _sub(uint128 a, uint128 b) pure internal returns (uint128) {
         require(b <= a, "subtraction underflow");
         return a - b;
     }
 
-    function _sub(int a, uint b) pure internal returns (int) {
-        int c = a - int(b);
-        require(a >= c, "int - uint underflow");
+    function _sub(int128 a, uint128 b) pure internal returns (int128) {
+        int128 c = a - int128(b);
+        require(a >= c, "int128 - uint128 underflow");
         return c;
     }
 
-    function _add(int a, uint b) pure internal returns (int) {
-        int c = a + int(b);
-        require(a <= c, "int + uint overflow");
+    function _add(int128 a, uint128 b) pure internal returns (int128) {
+        int128 c = a + int128(b);
+        require(a <= c, "int128 + uint128 overflow");
         return c;
     }
 
-    function _mul(uint a, CTokenAmount memory b) pure internal returns (uint) {
+    function _mul(uint128 a, CTokenAmount memory b) pure internal returns (uint128) {
         return _mul(a, b.val);
     }
 
-    function _mul(CTokenAmount memory a, uint b) pure internal returns (CTokenAmount memory) {
+    function _mul(CTokenAmount memory a, uint128 b) pure internal returns (CTokenAmount memory) {
         return CTokenAmount({val: _mul(a.val, b)});
     }
 
@@ -99,28 +99,28 @@ contract Math is Types {
         return Exp({mantissa: _mul(a.mantissa, b.mantissa) / EXP_SCALE});
     }
 
-    function _mul(Exp memory a, uint b) pure internal returns (Exp memory) {
+    function _mul(Exp memory a, uint128 b) pure internal returns (Exp memory) {
         return Exp({mantissa: _mul(a.mantissa, b)});
     }
 
-    function _mul(uint a, Exp memory b) pure internal returns (uint) {
+    function _mul(uint128 a, Exp memory b) pure internal returns (uint128) {
         return _mul(a, b.mantissa) / EXP_SCALE;
     }
 
-    function _mul(uint a, uint b) pure internal returns (uint) {
+    function _mul(uint128 a, uint128 b) pure internal returns (uint128) {
         if (a == 0 || b == 0) {
             return 0;
         }
-        uint c = a * b;
+        uint128 c = a * b;
         require(c / a == b, "multiplication overflow");
         return c;
     }
 
-    function _div(uint a, CTokenAmount memory b) pure internal returns (uint) {
+    function _div(uint128 a, CTokenAmount memory b) pure internal returns (uint128) {
         return _div(a, b.val);
     }
 
-    function _div(CTokenAmount memory a, uint b) pure internal returns (CTokenAmount memory) {
+    function _div(CTokenAmount memory a, uint128 b) pure internal returns (CTokenAmount memory) {
         return CTokenAmount({val: _div(a.val, b)});
     }
 
@@ -128,15 +128,15 @@ contract Math is Types {
         return Exp({mantissa: _div(_mul(a.mantissa, EXP_SCALE), b.mantissa)});
     }
 
-    function _div(Exp memory a, uint b) pure internal returns (Exp memory) {
+    function _div(Exp memory a, uint128 b) pure internal returns (Exp memory) {
         return Exp({mantissa: _div(a.mantissa, b)});
     }
 
-    function _div(uint a, Exp memory b) pure internal returns (uint) {
+    function _div(uint128 a, Exp memory b) pure internal returns (uint128) {
         return _div(_mul(a, EXP_SCALE), b.mantissa);
     }
 
-    function _div(uint a, uint b) pure internal returns (uint) {
+    function _div(uint128 a, uint128 b) pure internal returns (uint128) {
         require(b > 0, "divide by zero");
         return a / b;
     }

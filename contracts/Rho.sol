@@ -6,57 +6,57 @@ import "./InterestRateModel.sol";
 import "./Math.sol";
 
 interface CompInterface {
-    function transfer(address to, uint256 value) external returns (bool);
+    function transfer(address to, uint128 value) external returns (bool);
 }
 
 interface CTokenInterface {
-	function transferFrom(address from, address to, uint256 value) external returns (bool);
-    function transfer(address to, uint256 value) external returns (bool);
+	function transferFrom(address from, address to, uint128 value) external returns (bool);
+    function transfer(address to, uint128 value) external returns (bool);
 
-	function borrowIndex() external view returns (uint);
-	function accrualBlockNumber() external view returns(uint);
-	function borrowRatePerBlock() external view returns(uint);
-	function exchangeRateStored() external view returns (uint);
+	function borrowIndex() external view returns (uint128);
+	function accrualBlockNumber() external view returns(uint128);
+	function borrowRatePerBlock() external view returns(uint128);
+	function exchangeRateStored() external view returns (uint128);
 }
 
 interface RhoInterface {
-	function supply(uint cTokenSupplyAmount) external;
-	function remove(uint removeCTokenAmount) external;
-	function openPayFixedSwap(uint notionalAmount, uint maximumFixedRateMantissa) external returns (bytes32 swapHash);
-	function openReceiveFixedSwap(uint notionalAmount, uint minFixedRateMantissa) external returns (bytes32 swapHash);
+	function supply(uint128 cTokenSupplyAmount) external;
+	function remove(uint128 removeCTokenAmount) external;
+	function openPayFixedSwap(uint128 notionalAmount, uint128 maximumFixedRateMantissa) external returns (bytes32 swapHash);
+	function openReceiveFixedSwap(uint128 notionalAmount, uint128 minFixedRateMantissa) external returns (bytes32 swapHash);
 	function close(
 		bool userPayingFixed,
-		uint benchmarkIndexInit,
-		uint initBlock,
-		uint swapFixedRateMantissa,
-		uint notionalAmount,
-		uint userCollateralCTokens,
+		uint128 benchmarkIndexInit,
+		uint128 initBlock,
+		uint128 swapFixedRateMantissa,
+		uint128 notionalAmount,
+		uint128 userCollateralCTokens,
 		address owner
 	) external;
-	event Supply(address indexed supplier, uint cTokenSupplyAmount, uint newSupplyAmount);
-	event Remove(address indexed supplier, uint removeCTokenAmount, uint newSupplyValue);
+	event Supply(address indexed supplier, uint128 cTokenSupplyAmount, uint128 newSupplyAmount);
+	event Remove(address indexed supplier, uint128 removeCTokenAmount, uint128 newSupplyValue);
 	event OpenSwap(
 		bytes32 indexed swapHash,
 		bool userPayingFixed,
-		uint benchmarkIndexInit,
-		uint initBlock,
-		uint swapFixedRateMantissa,
-		uint notionalAmount,
-		uint userCollateralCTokens,
+		uint128 benchmarkIndexInit,
+		uint128 initBlock,
+		uint128 swapFixedRateMantissa,
+		uint128 notionalAmount,
+		uint128 userCollateralCTokens,
 		address indexed owner
 	);
 	event CloseSwap(
 		bytes32 indexed swapHash,
 		address indexed owner,
-		uint userPayout,
-		uint benchmarkIndexFinal
+		uint128 userPayout,
+		uint128 benchmarkIndexFinal
 	);
-	event Accrue(uint supplierLiquidityNew, uint lockedCollateralNew);
+	event Accrue(uint128 supplierLiquidityNew, uint128 lockedCollateralNew);
 	event SetInterestRateModel(address newModel, address oldModel);
 	event SetPause(bool isPaused);
 	event AdminRenounced();
-	event CompTransferred(address dest, uint amount);
-	event SetCollateralRequirements(uint minFloatRateMantissa, uint maxFloatRateMantissa);
+	event CompTransferred(address dest, uint128 amount);
+	event SetCollateralRequirements(uint128 minFloatRateMantissa, uint128 maxFloatRateMantissa);
 	event AdminChanged(address oldAdmin, address newAdmin);
 }
 
@@ -71,22 +71,22 @@ contract Rho is RhoInterface, Math {
 	CTokenInterface public immutable cToken;
 	CompInterface public immutable comp;
 
-	uint public immutable SWAP_MIN_DURATION;
-	uint public immutable SUPPLY_MIN_DURATION;
+	uint128 public immutable SWAP_MIN_DURATION;
+	uint128 public immutable SUPPLY_MIN_DURATION;
 
-	uint public lastAccrualBlock;
+	uint128 public lastAccrualBlock;
 	Exp public benchmarkIndexStored;
 
 	/* Notional size of each leg, one adjusting for compounding and one static */
-	uint public notionalReceivingFixed;
-	uint public notionalPayingFloat;
+	uint128 public notionalReceivingFixed;
+	uint128 public notionalPayingFloat;
 
-	uint public notionalPayingFixed;
-	uint public notionalReceivingFloat;
+	uint128 public notionalPayingFixed;
+	uint128 public notionalReceivingFloat;
 
 	/* Measure of outstanding swap obligations. 1 Unit = 1e18 notional * 1 block. Used to calculate collateral requirements */
-	int public parBlocksReceivingFixed;
-	int public parBlocksPayingFixed;
+	int128 public parBlocksReceivingFixed;
+	int128 public parBlocksPayingFixed;
 
 	/* Per block fixed / float interest rates used in collateral calculations */
 	Exp public avgFixedRateReceiving;
@@ -97,10 +97,10 @@ contract Rho is RhoInterface, Math {
 	Exp public minFloatRate;
 
 	/* Protocol PnL */
-	uint public supplyIndex;
+	uint128 public supplyIndex;
 	CTokenAmount public supplierLiquidity;
 
-	int public rateFactor;// for interest rate model
+	int128 public rateFactor;// for interest rate model
 
 	address public admin;
 	bool public isPaused;
@@ -110,17 +110,17 @@ contract Rho is RhoInterface, Math {
 
 	struct SupplyAccount {
 		CTokenAmount amount;
-		uint lastBlock;
-		uint index;
+		uint128 lastBlock;
+		uint128 index;
 	}
 
 	struct Swap {
 		bool userPayingFixed;
-		uint notionalAmount;
-		uint swapFixedRateMantissa;
-		uint benchmarkIndexInit;
-		uint userCollateralCTokens;
-		uint initBlock;
+		uint128 notionalAmount;
+		uint128 swapFixedRateMantissa;
+		uint128 benchmarkIndexInit;
+		uint128 userCollateralCTokens;
+		uint128 initBlock;
 		address owner;
 	}
 
@@ -128,10 +128,10 @@ contract Rho is RhoInterface, Math {
 		InterestRateModelInterface interestRateModel_,
 		CTokenInterface cToken_,
 		CompInterface comp_,
-		uint minFloatRateMantissa_,
-		uint maxFloatRateMantissa_,
-		uint swapMinDuration_,
-		uint supplyMinDuration_,
+		uint128 minFloatRateMantissa_,
+		uint128 maxFloatRateMantissa_,
+		uint128 swapMinDuration_,
+		uint128 supplyMinDuration_,
 		address admin_
 	) public {
 		require(minFloatRateMantissa_ < maxFloatRateMantissa_, "Min float rate must be below max float rate");
@@ -148,20 +148,20 @@ contract Rho is RhoInterface, Math {
 		admin = admin_;
 
 		supplyIndex = ONE_EXP.mantissa;
-		benchmarkIndexStored = _exp(cToken_.borrowIndex());
+		benchmarkIndexStored = _exp(5); //_exp(cToken_.borrowIndex());
 		isPaused = false;
 	}
 
 	/* @dev Supplies liquidity to the protocol. Become the counterparty for all swap traders, in return for fees.
 	 * @param cTokenSupplyAmount Amount to supply, in CTokens.
 	 */
-	function supply(uint cTokenSupplyAmount) public override {
+	function supply(uint128 cTokenSupplyAmount) public override {
 		require(isPaused == false, "Market paused");
 		CTokenAmount memory supplyAmount = CTokenAmount({val: cTokenSupplyAmount});
 
 		Exp memory cTokenExchangeRate = getExchangeRate();
 		accrue(cTokenExchangeRate);
-		uint prevIndex = supplyAccounts[msg.sender].index;
+		uint128 prevIndex = supplyAccounts[msg.sender].index;
 		CTokenAmount memory prevSupply = supplyAccounts[msg.sender].amount;
 
 		CTokenAmount memory truedUpPrevSupply;
@@ -187,7 +187,7 @@ contract Rho is RhoInterface, Math {
 	/* @dev Remove liquidity from protocol. Can only perform after a waiting period from supplying, to prevent interest rate manipulation
 	 * @param removeCTokenAmount Amount of CTokens to remove. 0 removes all CTokens.
 	 */
-	function remove(uint removeCTokenAmount) public override {
+	function remove(uint128 removeCTokenAmount) public override {
 		CTokenAmount memory removeAmount = CTokenAmount({val: removeCTokenAmount});
 		SupplyAccount memory account = supplyAccounts[msg.sender];
 		require(account.amount.val > 0, "Must withdraw from active account");
@@ -220,11 +220,11 @@ contract Rho is RhoInterface, Math {
 		transferOut(msg.sender, removeAmount);
 	}
 
-	function openPayFixedSwap(uint notionalAmount, uint maximumFixedRateMantissa) public override returns(bytes32 swapHash) {
+	function openPayFixedSwap(uint128 notionalAmount, uint128 maximumFixedRateMantissa) public override returns(bytes32 swapHash) {
 		return openInternal(true, notionalAmount, maximumFixedRateMantissa);
 	}
 
-	function openReceiveFixedSwap(uint notionalAmount, uint minFixedRateMantissa) public override returns(bytes32 swapHash) {
+	function openReceiveFixedSwap(uint128 notionalAmount, uint128 minFixedRateMantissa) public override returns(bytes32 swapHash) {
 		return openInternal(false, notionalAmount, minFixedRateMantissa);
 	}
 
@@ -234,12 +234,12 @@ contract Rho is RhoInterface, Math {
 	 * @param fixedRateLimitMantissa : The maximum (if payingFixed) or minimum (if receivingFixed) rate the swap should succeed at. Prevents frontrunning attacks.
 	 	* The amount of interest to pay over 2,102,400 blocks (~1 year), with 18 decimals of precision. Eg: 5% per block-year => 0.5e18.
 	*/
-	function openInternal(bool userPayingFixed, uint notionalAmount, uint fixedRateLimitMantissa) internal returns (bytes32 swapHash) {
+	function openInternal(bool userPayingFixed, uint128 notionalAmount, uint128 fixedRateLimitMantissa) internal returns (bytes32 swapHash) {
 		require(isPaused == false, "Market paused");
 		require(notionalAmount >= 1e18, "Swap notional amount must exceed minimum");
 		Exp memory cTokenExchangeRate = getExchangeRate();
 		CTokenAmount memory lockedCollateral = accrue(cTokenExchangeRate);
-		(Exp memory swapFixedRate, int rateFactorNew) = getSwapRate(userPayingFixed, notionalAmount, lockedCollateral, supplierLiquidity, cTokenExchangeRate);
+		(Exp memory swapFixedRate, int128 rateFactorNew) = getSwapRate(userPayingFixed, notionalAmount, lockedCollateral, supplierLiquidity, cTokenExchangeRate);
 		CTokenAmount memory userCollateralCTokens;
 		if (userPayingFixed) {
 			require(swapFixedRate.mantissa <= fixedRateLimitMantissa, "The fixed rate Rho would receive is above user's limit");
@@ -283,11 +283,11 @@ contract Rho is RhoInterface, Math {
 
 
 	// @dev User is paying fixed, protocol is receiving fixed
-	function openPayFixedSwapInternal(uint notionalAmount, Exp memory swapFixedRate, Exp memory cTokenExchangeRate) internal returns (CTokenAmount memory userCollateralCTokens) {
-		uint notionalReceivingFixedNew = _add(notionalReceivingFixed, notionalAmount);
-		uint notionalPayingFloatNew = _add(notionalPayingFloat, notionalAmount);
+	function openPayFixedSwapInternal(uint128 notionalAmount, Exp memory swapFixedRate, Exp memory cTokenExchangeRate) internal returns (CTokenAmount memory userCollateralCTokens) {
+		uint128 notionalReceivingFixedNew = _add(notionalReceivingFixed, notionalAmount);
+		uint128 notionalPayingFloatNew = _add(notionalPayingFloat, notionalAmount);
 
-		int parBlocksReceivingFixedNew = _add(parBlocksReceivingFixed, _mul(SWAP_MIN_DURATION, notionalAmount));
+		int128 parBlocksReceivingFixedNew = _add(parBlocksReceivingFixed, _mul(SWAP_MIN_DURATION, notionalAmount));
 
 		/* avgFixedRateReceivingNew = (avgFixedRateReceiving * notionalReceivingFixed + notionalAmount * swapFixedRate) / (notionalReceivingFixed + notionalAmount);*/
 		Exp memory priorFixedReceivingRate = _mul(avgFixedRateReceiving, notionalReceivingFixed);
@@ -305,11 +305,11 @@ contract Rho is RhoInterface, Math {
 	}
 
 	// @dev User is receiving fixed, protocol is paying fixed
-	function openReceiveFixedSwapInternal(uint notionalAmount, Exp memory swapFixedRate, Exp memory cTokenExchangeRate) internal returns (CTokenAmount memory userCollateralCTokens) {
-		uint notionalPayingFixedNew = _add(notionalPayingFixed, notionalAmount);
-		uint notionalReceivingFloatNew = _add(notionalReceivingFloat, notionalAmount);
+	function openReceiveFixedSwapInternal(uint128 notionalAmount, Exp memory swapFixedRate, Exp memory cTokenExchangeRate) internal returns (CTokenAmount memory userCollateralCTokens) {
+		uint128 notionalPayingFixedNew = _add(notionalPayingFixed, notionalAmount);
+		uint128 notionalReceivingFloatNew = _add(notionalReceivingFloat, notionalAmount);
 
-		int parBlocksPayingFixedNew = _add(parBlocksPayingFixed, _mul(SWAP_MIN_DURATION, notionalAmount));
+		int128 parBlocksPayingFixedNew = _add(parBlocksPayingFixed, _mul(SWAP_MIN_DURATION, notionalAmount));
 
 		/* avgFixedRatePayingNew = (avgFixedRatePaying * notionalPayingFixed + notionalAmount * swapFixedRate) / (notionalPayingFixed + notionalAmount) */
 		Exp memory priorFixedPayingRate = _mul(avgFixedRatePaying, notionalPayingFixed);
@@ -331,11 +331,11 @@ contract Rho is RhoInterface, Math {
 	 */
 	function close(
 		bool userPayingFixed,
-		uint benchmarkIndexInit,
-		uint initBlock,
-		uint swapFixedRateMantissa,
-		uint notionalAmount,
-		uint userCollateralCTokens,
+		uint128 benchmarkIndexInit,
+		uint128 initBlock,
+		uint128 swapFixedRateMantissa,
+		uint128 notionalAmount,
+		uint128 userCollateralCTokens,
 		address owner
 	) public override {
 		Exp memory cTokenExchangeRate = getExchangeRate();
@@ -349,7 +349,7 @@ contract Rho is RhoInterface, Math {
 			userCollateralCTokens,
 			owner
 		));
-		uint swapDuration = _sub(getBlockNumber(), initBlock);
+		uint128 swapDuration = _sub(getBlockNumber(), initBlock);
 		require(swapDuration >= SWAP_MIN_DURATION, "Premature close swap");
 		require(swaps[swapHash] == true, "No active swap found");
 		Exp memory benchmarkIndexRatio = _div(benchmarkIndexStored, _exp(benchmarkIndexInit));
@@ -384,15 +384,15 @@ contract Rho is RhoInterface, Math {
 
 	// @dev User paid fixed, protocol paid fixed
 	function closePayFixedSwapInternal(
-		uint swapDuration,
+		uint128 swapDuration,
 		Exp memory benchmarkIndexRatio,
 		Exp memory swapFixedRate,
-		uint notionalAmount,
+		uint128 notionalAmount,
 		CTokenAmount memory userCollateral,
 		Exp memory cTokenExchangeRate
 	) internal returns (CTokenAmount memory userPayout) {
-		uint notionalReceivingFixedNew = _sub(notionalReceivingFixed, notionalAmount);
-		uint notionalPayingFloatNew = _sub(notionalPayingFloat, _mul(notionalAmount, benchmarkIndexRatio));
+		uint128 notionalReceivingFixedNew = _sub(notionalReceivingFixed, notionalAmount);
+		uint128 notionalPayingFloatNew = _sub(notionalPayingFloat, _mul(notionalAmount, benchmarkIndexRatio));
 
 		/* avgFixedRateReceiving = avgFixedRateReceiving * notionalReceivingFixed - swapFixedRate * notionalAmount / notionalReceivingFixedNew */
 		Exp memory avgFixedRateReceivingNew;
@@ -406,7 +406,7 @@ contract Rho is RhoInterface, Math {
 		/* The protocol reserved enough collateral for this swap for SWAP_MIN_DURATION, but its has been longer.
 		 * We have decreased lockedCollateral in `accrue` for the late blocks, meaning we decreased it by more than the "open" tx added to it in the first place.
 		 */
-		int parBlocksReceivingFixedNew = _add(parBlocksReceivingFixed, _mul(notionalAmount, _sub(swapDuration, SWAP_MIN_DURATION)));
+		int128 parBlocksReceivingFixedNew = _add(parBlocksReceivingFixed, _mul(notionalAmount, _sub(swapDuration, SWAP_MIN_DURATION)));
 
 		CTokenAmount memory fixedLeg = toCTokens(_mul(_mul(notionalAmount, swapDuration), swapFixedRate), cTokenExchangeRate);
 		CTokenAmount memory floatLeg = toCTokens(_mul(notionalAmount, _sub(benchmarkIndexRatio, ONE_EXP)), cTokenExchangeRate);
@@ -422,15 +422,15 @@ contract Rho is RhoInterface, Math {
 
 	// @dev User received fixed, protocol paid fixed
 	function closeReceiveFixedSwapInternal(
-		uint swapDuration,
+		uint128 swapDuration,
 		Exp memory benchmarkIndexRatio,
 		Exp memory swapFixedRate,
-		uint notionalAmount,
+		uint128 notionalAmount,
 		CTokenAmount memory userCollateral,
 		Exp memory cTokenExchangeRate
 	) internal returns (CTokenAmount memory userPayout) {
-		uint notionalPayingFixedNew = _sub(notionalPayingFixed, notionalAmount);
-		uint notionalReceivingFloatNew = _sub(notionalReceivingFloat, _mul(notionalAmount, benchmarkIndexRatio));
+		uint128 notionalPayingFixedNew = _sub(notionalPayingFixed, notionalAmount);
+		uint128 notionalReceivingFloatNew = _sub(notionalReceivingFloat, _mul(notionalAmount, benchmarkIndexRatio));
 
 		/* avgFixedRatePaying = avgFixedRatePaying * notionalPayingFixed - swapFixedRate * notionalAmount / notionalReceivingFixedNew */
 		Exp memory avgFixedRatePayingNew;
@@ -444,7 +444,7 @@ contract Rho is RhoInterface, Math {
 		/* The protocol reserved enough collateral for this swap for SWAP_MIN_DURATION, but its has been longer.
 		 * We have decreased lockedCollateral in `accrue` for the late blocks, meaning we decreased it by more than the "open" tx added to it in the first place.
 		 */
-		int parBlocksPayingFixedNew = _add(parBlocksPayingFixed, _mul(notionalAmount, _sub(swapDuration, SWAP_MIN_DURATION)));
+		int128 parBlocksPayingFixedNew = _add(parBlocksPayingFixed, _mul(notionalAmount, _sub(swapDuration, SWAP_MIN_DURATION)));
 
 		CTokenAmount memory fixedLeg = toCTokens(_mul(_mul(notionalAmount, swapDuration), swapFixedRate), cTokenExchangeRate);
 		CTokenAmount memory floatLeg = toCTokens(_mul(notionalAmount, _sub(benchmarkIndexRatio, ONE_EXP)), cTokenExchangeRate);
@@ -464,8 +464,8 @@ contract Rho is RhoInterface, Math {
 	 */
 	function accrue(Exp memory cTokenExchangeRate) internal returns (CTokenAmount memory) {
 		require(getBlockNumber() >= lastAccrualBlock, "Block number decreasing");
-		uint accruedBlocks = getBlockNumber() - lastAccrualBlock;
-		(CTokenAmount memory lockedCollateralNew, int parBlocksReceivingFixedNew, int parBlocksPayingFixedNew) = getLockedCollateral(accruedBlocks, cTokenExchangeRate);
+		uint128 accruedBlocks = getBlockNumber() - lastAccrualBlock;
+		(CTokenAmount memory lockedCollateralNew, int128 parBlocksReceivingFixedNew, int128 parBlocksPayingFixedNew) = getLockedCollateral(accruedBlocks, cTokenExchangeRate);
 
 		if (accruedBlocks == 0) {
 			return lockedCollateralNew;
@@ -478,13 +478,13 @@ contract Rho is RhoInterface, Math {
 		CTokenAmount memory supplierLiquidityNew = getSupplierLiquidity(accruedBlocks, floatRate, cTokenExchangeRate);
 
 		// supplyIndex *= supplierLiquidityNew / supplierLiquidity
-		uint supplyIndexNew = supplyIndex;
+		uint128 supplyIndexNew = supplyIndex;
 		if (supplierLiquidityNew.val != 0) {
 			supplyIndexNew = _div(_mul(supplyIndex, supplierLiquidityNew), supplierLiquidity);
 		}
 
-		uint notionalPayingFloatNew = _mul(notionalPayingFloat, benchmarkIndexRatio);
-		uint notionalReceivingFloatNew = _mul(notionalReceivingFloat, benchmarkIndexRatio);
+		uint128 notionalPayingFloatNew = _mul(notionalPayingFloat, benchmarkIndexRatio);
+		uint128 notionalReceivingFloatNew = _mul(notionalReceivingFloat, benchmarkIndexRatio);
 
 		/** Apply Effects **/
 
@@ -515,32 +515,32 @@ contract Rho is RhoInterface, Math {
 
 	// ** PUBLIC PURE HELPERS ** //
 
-	function toCTokens(uint amount, Exp memory cTokenExchangeRate) public pure returns (CTokenAmount memory) {
-		uint cTokenAmount = _div(amount, cTokenExchangeRate);
+	function toCTokens(uint128 amount, Exp memory cTokenExchangeRate) public pure returns (CTokenAmount memory) {
+		uint128 cTokenAmount = _div(amount, cTokenExchangeRate);
 		return CTokenAmount({val: cTokenAmount});
 	}
 
-	function toUnderlying(CTokenAmount memory amount, Exp memory cTokenExchangeRate) public pure returns (uint) {
+	function toUnderlying(CTokenAmount memory amount, Exp memory cTokenExchangeRate) public pure returns (uint128) {
 		return _mul(amount.val, cTokenExchangeRate);
 	}
 
 	// *** PUBLIC VIEW GETTERS *** //
 
 	// @dev Calculate protocol locked collateral and parBlocks, which is a measure of the fixed rate credit/debt.
-	// * Uses int to keep negatives, for correct late blocks calc when a single swap is outstanding
-	function getLockedCollateral(uint accruedBlocks, Exp memory cTokenExchangeRate) public view returns (CTokenAmount memory lockedCollateral, int parBlocksReceivingFixedNew, int parBlocksPayingFixedNew) {
+	// * Uses int128 to keep negatives, for correct late blocks calc when a single swap is outstanding
+	function getLockedCollateral(uint128 accruedBlocks, Exp memory cTokenExchangeRate) public view returns (CTokenAmount memory lockedCollateral, int128 parBlocksReceivingFixedNew, int128 parBlocksPayingFixedNew) {
 		parBlocksReceivingFixedNew = _sub(parBlocksReceivingFixed, _mul(accruedBlocks, notionalReceivingFixed));
 		parBlocksPayingFixedNew = _sub(parBlocksPayingFixed, _mul(accruedBlocks, notionalPayingFixed));
 
 		// Par blocks can be negative during the first or last ever swap, so floor them to 0
-		uint minFloatToReceive = _mul(_floor(parBlocksPayingFixedNew), minFloatRate);
-		uint maxFloatToPay = _mul(_floor(parBlocksReceivingFixedNew), maxFloatRate);
+		uint128 minFloatToReceive = _mul(_floor(parBlocksPayingFixedNew), minFloatRate);
+		uint128 maxFloatToPay = _mul(_floor(parBlocksReceivingFixedNew), maxFloatRate);
 
-		uint fixedToReceive = _mul(_floor(parBlocksReceivingFixedNew), avgFixedRateReceiving);
-		uint fixedToPay = _mul(_floor(parBlocksPayingFixedNew), avgFixedRatePaying);
+		uint128 fixedToReceive = _mul(_floor(parBlocksReceivingFixedNew), avgFixedRateReceiving);
+		uint128 fixedToPay = _mul(_floor(parBlocksPayingFixedNew), avgFixedRatePaying);
 
-		uint minCredit = _add(fixedToReceive, minFloatToReceive);
-		uint maxDebt = _add(fixedToPay, maxFloatToPay);
+		uint128 minCredit = _add(fixedToReceive, minFloatToReceive);
+		uint128 maxDebt = _add(fixedToPay, maxFloatToPay);
 
 		if (maxDebt > minCredit) {
 			lockedCollateral = toCTokens(_sub(maxDebt, minCredit), cTokenExchangeRate);
@@ -552,11 +552,11 @@ contract Rho is RhoInterface, Math {
 	/* @dev Calculate protocol P/L by adding the cashflows since last accrual.
 	 * 		supplierLiquidity += fixedReceived + floatReceived - fixedPaid - floatPaid
 	 */
-	function getSupplierLiquidity(uint accruedBlocks, Exp memory floatRate, Exp memory cTokenExchangeRate) public view returns (CTokenAmount memory supplierLiquidityNew) {
-		uint floatPaid = _mul(notionalPayingFloat, floatRate);
-		uint floatReceived = _mul(notionalReceivingFloat, floatRate);
-		uint fixedPaid = _mul(accruedBlocks, _mul(notionalPayingFixed, avgFixedRatePaying));
-		uint fixedReceived = _mul(accruedBlocks, _mul(notionalReceivingFixed, avgFixedRateReceiving));
+	function getSupplierLiquidity(uint128 accruedBlocks, Exp memory floatRate, Exp memory cTokenExchangeRate) public view returns (CTokenAmount memory supplierLiquidityNew) {
+		uint128 floatPaid = _mul(notionalPayingFloat, floatRate);
+		uint128 floatReceived = _mul(notionalReceivingFloat, floatRate);
+		uint128 fixedPaid = _mul(accruedBlocks, _mul(notionalPayingFixed, avgFixedRatePaying));
+		uint128 fixedReceived = _mul(accruedBlocks, _mul(notionalReceivingFixed, avgFixedRateReceiving));
 
 		CTokenAmount memory rec = toCTokens(_add(fixedReceived, floatReceived), cTokenExchangeRate);
 		CTokenAmount memory paid = toCTokens(_add(fixedPaid, floatPaid), cTokenExchangeRate);
@@ -566,12 +566,12 @@ contract Rho is RhoInterface, Math {
 	// @dev Get the rate for incoming swaps
 	function getSwapRate(
 		bool userPayingFixed,
-		uint orderNotional,
+		uint128 orderNotional,
 		CTokenAmount memory lockedCollateral,
 		CTokenAmount memory supplierLiquidity_,
 		Exp memory cTokenExchangeRate
-	) public view returns (Exp memory, int) {
-		(uint ratePerBlockMantissa, int rateFactorNew) = interestRateModel.getSwapRate(
+	) public view returns (Exp memory, int128) {
+		(uint128 ratePerBlockMantissa, int128 rateFactorNew) = interestRateModel.getSwapRate(
 			rateFactor,
 			userPayingFixed,
 			orderNotional,
@@ -583,26 +583,26 @@ contract Rho is RhoInterface, Math {
 
 	// @dev The amount that must be locked up for the payFixed leg of a swap paying fixed. Used to calculate both the protocol and user's collateral.
 	// = notionalAmount * SWAP_MIN_DURATION * (swapFixedRate - minFloatRate)
-	function getPayFixedInitCollateral(Exp memory fixedRate, uint notionalAmount, Exp memory cTokenExchangeRate) public view returns (CTokenAmount memory) {
+	function getPayFixedInitCollateral(Exp memory fixedRate, uint128 notionalAmount, Exp memory cTokenExchangeRate) public view returns (CTokenAmount memory) {
 		Exp memory rateDelta = _sub(fixedRate, minFloatRate);
-		uint amt = _mul(_mul(SWAP_MIN_DURATION, notionalAmount), rateDelta);
+		uint128 amt = _mul(_mul(SWAP_MIN_DURATION, notionalAmount), rateDelta);
 		return toCTokens(amt, cTokenExchangeRate);
 	}
 
 	// @dev The amount that must be locked up for the receiveFixed leg of a swap receiving fixed. Used to calculate both the protocol and user's collateral.
 	// = notionalAmount * SWAP_MIN_DURATION * (maxFloatRate - swapFixedRate)
-	function getReceiveFixedInitCollateral(Exp memory fixedRate, uint notionalAmount, Exp memory cTokenExchangeRate) public view returns (CTokenAmount memory) {
+	function getReceiveFixedInitCollateral(Exp memory fixedRate, uint128 notionalAmount, Exp memory cTokenExchangeRate) public view returns (CTokenAmount memory) {
 		Exp memory rateDelta = _sub(maxFloatRate, fixedRate);
-		uint amt = _mul(_mul(SWAP_MIN_DURATION, notionalAmount), rateDelta);
+		uint128 amt = _mul(_mul(SWAP_MIN_DURATION, notionalAmount), rateDelta);
 		return toCTokens(amt, cTokenExchangeRate);
 	}
 
 	function getBenchmarkIndex() public view returns (Exp memory) {
 		Exp memory borrowIndex = _exp(cToken.borrowIndex());
 		require(borrowIndex.mantissa != 0, "Benchmark index is zero");
-		uint accrualBlockNumber = cToken.accrualBlockNumber();
+		uint128 accrualBlockNumber = cToken.accrualBlockNumber();
 		require(getBlockNumber() >= accrualBlockNumber, "Bn decreasing");
-		uint blockDelta = _sub(getBlockNumber(), accrualBlockNumber);
+		uint128 blockDelta = _sub(getBlockNumber(), accrualBlockNumber);
 
 		if (blockDelta == 0) {
 			return borrowIndex;
@@ -617,8 +617,8 @@ contract Rho is RhoInterface, Math {
 		return _exp(cToken.exchangeRateStored());
 	}
 
-	function getBlockNumber() public view virtual returns (uint) {
-		return block.number;
+	function getBlockNumber() public view virtual returns (uint128) {
+		return uint128(block.number);
 	}
 
 	/** ADMIN FUNCTIONS **/
@@ -630,7 +630,7 @@ contract Rho is RhoInterface, Math {
 		interestRateModel = newModel;
 	}
 
-	function _setCollateralRequirements(uint minFloatRateMantissa_, uint maxFloatRateMantissa_) external {
+	function _setCollateralRequirements(uint128 minFloatRateMantissa_, uint128 maxFloatRateMantissa_) external {
 		require(msg.sender == admin, "Must be admin to set collateral requirements");
 		require(minFloatRateMantissa_ < maxFloatRateMantissa_, "Min float rate must be below max float rate");
 		require(minFloatRateMantissa_ < 1e11, "Min float rate above maximum");
@@ -648,7 +648,7 @@ contract Rho is RhoInterface, Math {
 		isPaused = isPaused_;
 	}
 
-	function _transferComp(address dest, uint amount) external {
+	function _transferComp(address dest, uint128 amount) external {
 		require(msg.sender == admin, "Must be admin to transfer comp");
 		emit CompTransferred(dest, amount);
 		comp.transfer(dest, amount);

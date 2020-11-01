@@ -6,16 +6,16 @@ import "../Rho.sol";
 
 contract MockRho is Rho {
 
-	uint public blockNumber = 100;
+	uint128 public blockNumber = 100;
 
 	constructor (
 		InterestRateModelInterface interestRateModel_,
 		CTokenInterface cToken_,
 		CompInterface comp_,
-		uint minFloatRateMantissa_,
-		uint maxFloatRateMantissa_,
-		uint swapMinDuration_,
-		uint supplyMinDuration_,
+		uint128 minFloatRateMantissa_,
+		uint128 maxFloatRateMantissa_,
+		uint128 swapMinDuration_,
+		uint128 supplyMinDuration_,
 		address admin_
 	)
 		Rho(
@@ -30,11 +30,11 @@ contract MockRho is Rho {
 		)
 		public {}
 
-	function setBlockNumber(uint blockNumber_) public returns (uint) {
+	function setBlockNumber(uint128 blockNumber_) public returns (uint128) {
 		blockNumber = blockNumber_;
 	}
 
-	function getBlockNumber() public view override returns (uint) {
+	function getBlockNumber() public view override returns (uint128) {
 		return blockNumber;
 	}
 
@@ -42,14 +42,14 @@ contract MockRho is Rho {
 		return accrue(getExchangeRate());
 	}
 
-	function advanceBlocks(uint blocks) public {
+	function advanceBlocks(uint128 blocks) public {
 		blockNumber = blockNumber + blocks;
 	}
 
-	function advanceBlocksProtocol(uint blocks) public {
+	function advanceBlocksProtocol(uint128 blocks) public {
 		advanceBlocks(blocks);
 
-		(bool worked, bytes memory _) = address(cToken).call(abi.encodeWithSignature("advanceBlocks(uint256)", blocks));
+		(bool worked, bytes memory _) = address(cToken).call(abi.encodeWithSignature("advanceBlocks(uint128256)", blocks));
 		require(worked == true, "Advance blocks didnt work");
 		_;
 	}
