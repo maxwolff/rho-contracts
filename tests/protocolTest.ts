@@ -1,4 +1,4 @@
-const { bn, mantissa, hashEncode, str } = require('./util/Helpers');
+const { bn, mantissa, hashEncode, str, MAX_UINT } = require('./util/Helpers');
 
 const MIN_FLOAT_MANTISSA_PER_BLOCK = bn(0);
 const MAX_FLOAT_MANTISSA_PER_BLOCK = bn(1e11); // => 2.1024E17 per year via 2102400 blocks / year. ~21%, 3.5% (3.456E16) per 60 days (345600 blocks)
@@ -46,7 +46,8 @@ const deployProtocol = async (opts = {}) => {
 		MAX_FLOAT_MANTISSA_PER_BLOCK,
 		SWAP_MIN_DURATION,
 		SUPPLY_MIN_DURATION,
-		saddle.accounts[0]
+		saddle.accounts[0],
+		opts.liquidityLimit || MAX_UINT
 	]);
 	const rhoLens = await deploy('RhoLensV1', [rho._address]);
 
@@ -724,21 +725,21 @@ describe('Protocol Unit Tests', () => {
 		});
 
 		it('should set collateral requirements', async () => {
-			await expect(send(rho, '_setCollateralRequirements',[0.5e10, 0.5e11], {from:a1})).rejects.toRevert('Must be admin to set collateral requirements');
-			await expect(send(rho, '_setCollateralRequirements',[1e12, 1e11], {from:root})).rejects.toRevert('Min float rate must be below max float rate');
-			// TODO test more reverts?
 			await send(rho, '_setCollateralRequirements',[0.5e10, 0.5e11], {from:root});
 			expect(await call(rho, 'minFloatRate',[])).toEqNum(0.5e10);
 			expect(await call(rho, 'maxFloatRate',[])).toEqNum(0.5e11);
 		});
 
-		it('should change admin', async () => {
-			await expect(send(rho, '_changeAdmin',[a2], {from:a1})).rejects.toRevert('Must be admin to change admin');
-			await send(rho, '_changeAdmin',[a2], {from:root});
-			const model2 = await deploy('MockInterestRateModel', []);
-			await expect(
-				send(rho, '_setInterestRateModel', [model2._address], {from: root})
-			).rejects.toRevert('Must be admin to set interest rate model');
+		it('should set collateral requirements', async () => {
+			await send(rho, '_setCollateralRequirements',[0.5e10, 0.5e11], {from:root});
+			expect(await call(rho, 'minFloatRate',[])).toEqNum(0.5e10);
+			expect(await call(rho, 'maxFloatRate',[])).toEqNum(0.5e11);
+		});
+
+		it('should set limit', async () => {
+			await expect(send(rho, '_setLiquidityLimit', [bn(44e8)], {from:a1})).rejects.toRevert('Must be admin to set liqiudity limit');
+			await send(rho, '_setLiquidityLimit', [bn(44e8)], {from:root});
+			expect(await call(rho, 'liquidityLimit')).toEqNum(bn(44e8));
 		});
 
 		it('should set pause', async () => {
@@ -758,4 +759,33 @@ describe('Protocol Unit Tests', () => {
 		});
 
 	});
+});
+
+describe('Pause Admin Tests', () => {
+	// root just deploys, has no actions with protocol
+	const [root, lp, a1, a2, ...accounts] = saddle.accounts;
+	let cToken, rho;
+
+	// rho and ctoken contract start with mocked bn of 100
+	beforeEach(async () => {
+		({ cToken, rho} = await deployProtocol({mockModel: true, liquidityLimit: bn(50e8)}));
+		await prep(rho._address, bn(51e8), cToken, lp);
+		await send(cToken, 'setBorrowIndex', [mantissa(1.2)]);
+		await send(rho, 'supply', [bn(49.9e8)], {
+			from: lp,
+		});
+	});
+
+	it('should revert on supply', async () => {
+		await expect(send(rho, 'supply', [bn(2e8)], {from: lp})).rejects.toRevert('Supply paused, above liquidity limit');
+		
+	});
+
+	it('should revert on open', async () => {
+		await prep(rho._address, mantissa(100), cToken, a1);
+		await send(rho, 'openReceiveFixedSwap', [mantissa(200), bn(0)], {from: a1});// just to get over the limit
+		await send(rho, 'advanceBlocks', [5000]);
+		await expect(send(rho, 'openReceiveFixedSwap', [mantissa(1), bn(0)], {from: a1})).rejects.toRevert('Open paused, above liquidity limit');
+	});
+
 });

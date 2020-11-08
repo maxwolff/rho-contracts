@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: UNLICENSED
 pragma experimental ABIEncoderV2;
 pragma solidity ^0.6.10;
 
@@ -16,7 +15,8 @@ contract MockRho is Rho {
 		uint maxFloatRateMantissa_,
 		uint swapMinDuration_,
 		uint supplyMinDuration_,
-		address admin_
+		address admin_,
+		uint liquidityLimitCTokens_
 	)
 		Rho(
 			interestRateModel_,
@@ -26,7 +26,8 @@ contract MockRho is Rho {
 			maxFloatRateMantissa_,
 			swapMinDuration_,
 			supplyMinDuration_,
-			admin_
+			admin_,
+			liquidityLimitCTokens_
 		)
 		public {}
 

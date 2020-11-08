@@ -14,6 +14,8 @@ const mantissa = num => {
   return ethers.utils.bigNumberify(new BigNumber(num).times(1e18).toFixed());
 }
 
+const MAX_UINT = bn(2).pow(256).sub(1).toString();
+
 const hashEncode = (args) => {
 	const web3 = new (require('web3'))();
 	let str = web3.eth.abi.encodeParameters(['bool', 'uint256', 'uint256', 'uint256', 'uint256', 'uint256', 'address'], args);
@@ -49,5 +51,6 @@ module.exports = {
 	str,
 	mantissa,
 	hashEncode,
-	sendRPC
+	sendRPC, 
+  MAX_UINT
 };

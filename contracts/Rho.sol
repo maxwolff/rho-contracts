@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0
 pragma experimental ABIEncoderV2;
 pragma solidity ^0.6.10;
 
@@ -58,6 +57,7 @@ interface RhoInterface {
 	event CompTransferred(address dest, uint amount);
 	event SetCollateralRequirements(uint minFloatRateMantissa, uint maxFloatRateMantissa);
 	event AdminChanged(address oldAdmin, address newAdmin);
+	event SetLiquidityLimit(uint limit);
 }
 
 /* Notes:
@@ -104,6 +104,7 @@ contract Rho is RhoInterface, Math {
 
 	address public admin;
 	bool public isPaused;
+	CTokenAmount public liquidityLimit; // safety feature
 
 	mapping(address => SupplyAccount) public supplyAccounts;
 	mapping(bytes32 => bool) public swaps;
@@ -132,11 +133,10 @@ contract Rho is RhoInterface, Math {
 		uint maxFloatRateMantissa_,
 		uint swapMinDuration_,
 		uint supplyMinDuration_,
-		address admin_
+		address admin_,
+		uint liquidityLimitCTokens_
 	) public {
 		require(minFloatRateMantissa_ < maxFloatRateMantissa_, "Min float rate must be below max float rate");
-		require(minFloatRateMantissa_ < 1e11, "Min float rate above maximum");
-		require(maxFloatRateMantissa_ > 1e10, "Max float rate below minimum");
 
 		interestRateModel = interestRateModel_;
 		cToken = cToken_;
@@ -150,14 +150,18 @@ contract Rho is RhoInterface, Math {
 		supplyIndex = ONE_EXP.mantissa;
 		benchmarkIndexStored = _exp(cToken_.borrowIndex());
 		isPaused = false;
+		liquidityLimit = CTokenAmount({val:liquidityLimitCTokens_});
 	}
 
 	/* @dev Supplies liquidity to the protocol. Become the counterparty for all swap traders, in return for fees.
 	 * @param cTokenSupplyAmount Amount to supply, in CTokens.
 	 */
 	function supply(uint cTokenSupplyAmount) public override {
-		require(isPaused == false, "Market paused");
 		CTokenAmount memory supplyAmount = CTokenAmount({val: cTokenSupplyAmount});
+		CTokenAmount memory supplierLiquidityNew = _add(supplierLiquidity, supplyAmount);
+		
+		require(_lt(supplierLiquidityNew, liquidityLimit), "Supply paused, above liquidity limit");
+		require(isPaused == false, "Market paused");
 
 		Exp memory cTokenExchangeRate = getExchangeRate();
 		accrue(cTokenExchangeRate);
@@ -179,7 +183,7 @@ contract Rho is RhoInterface, Math {
 		supplyAccounts[msg.sender].lastBlock = getBlockNumber();
 		supplyAccounts[msg.sender].index = supplyIndex;
 
-		supplierLiquidity = _add(supplierLiquidity, supplyAmount);
+		supplierLiquidity = supplierLiquidityNew;
 
 		transferIn(msg.sender, supplyAmount);
 	}
@@ -238,18 +242,23 @@ contract Rho is RhoInterface, Math {
 		require(isPaused == false, "Market paused");
 		require(notionalAmount >= 1e18, "Swap notional amount must exceed minimum");
 		Exp memory cTokenExchangeRate = getExchangeRate();
+
 		CTokenAmount memory lockedCollateral = accrue(cTokenExchangeRate);
-		(Exp memory swapFixedRate, int rateFactorNew) = getSwapRate(userPayingFixed, notionalAmount, lockedCollateral, supplierLiquidity, cTokenExchangeRate);
+
+		CTokenAmount memory supplierLiquidityTemp = supplierLiquidity; // copy to memory for gas
+		require(_lt(supplierLiquidityTemp, liquidityLimit), "Open paused, above liquidity limit");
+		
+		(Exp memory swapFixedRate, int rateFactorNew) = getSwapRate(userPayingFixed, notionalAmount, lockedCollateral, supplierLiquidityTemp, cTokenExchangeRate);
 		CTokenAmount memory userCollateralCTokens;
 		if (userPayingFixed) {
 			require(swapFixedRate.mantissa <= fixedRateLimitMantissa, "The fixed rate Rho would receive is above user's limit");
 			CTokenAmount memory lockedCollateralHypothetical = _add(lockedCollateral, getReceiveFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
-			require(_lte(lockedCollateralHypothetical, supplierLiquidity), "Insufficient protocol collateral");
+			require(_lte(lockedCollateralHypothetical, supplierLiquidityTemp), "Insufficient protocol collateral");
 			userCollateralCTokens = openPayFixedSwapInternal(notionalAmount, swapFixedRate, cTokenExchangeRate);
 		} else {
 			require(swapFixedRate.mantissa >= fixedRateLimitMantissa, "The fixed rate Rho would pay is below user's limit");
 			CTokenAmount memory lockedCollateralHypothetical = _add(lockedCollateral, getPayFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
-			require(_lte(lockedCollateralHypothetical, supplierLiquidity), "Insufficient protocol collateral");
+			require(_lte(lockedCollateralHypothetical, supplierLiquidityTemp), "Insufficient protocol collateral");
 			userCollateralCTokens = openReceiveFixedSwapInternal(notionalAmount, swapFixedRate, cTokenExchangeRate);
 		}
 
@@ -633,12 +642,16 @@ contract Rho is RhoInterface, Math {
 	function _setCollateralRequirements(uint minFloatRateMantissa_, uint maxFloatRateMantissa_) external {
 		require(msg.sender == admin, "Must be admin to set collateral requirements");
 		require(minFloatRateMantissa_ < maxFloatRateMantissa_, "Min float rate must be below max float rate");
-		require(minFloatRateMantissa_ < 1e11, "Min float rate above maximum");
-		require(maxFloatRateMantissa_ > 1e10, "Max float rate below minimum");
 
 		emit SetCollateralRequirements(minFloatRateMantissa_, maxFloatRateMantissa_);
 		minFloatRate = _exp(minFloatRateMantissa_);
 		maxFloatRate = _exp(maxFloatRateMantissa_);
+	}
+
+	function _setLiquidityLimit(uint limit_) external {
+		require(msg.sender == admin, "Must be admin to set liqiudity limit");
+		emit SetLiquidityLimit(limit_);
+		liquidityLimit = CTokenAmount({val: limit_});
 	}
 
 	function _pause(bool isPaused_) external {
