@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { str, bn, sendRPC } = require('../tests/util/Helpers.ts');
+const { str, bn, sendRPC, MAX_UINT } = require('../tests/util/Helpers.ts');
 const CTokenABI = require('../script/cTokenABI.js').abi;
 
 const deployProtocol = async (conf) => {
@@ -22,7 +22,8 @@ const deployProtocol = async (conf) => {
 		conf.maxFloatMantissaPerBlock,
 		conf.swapMinDuration,
 		conf.supplyMinDuration,
-		saddle.accounts[0]
+		saddle.accounts[0],
+		MAX_UINT
 	]);
 	assert(rho != undefined, "breokn here");
 	const rhoLens = await deploy('RhoLensV1', [rho._address]);

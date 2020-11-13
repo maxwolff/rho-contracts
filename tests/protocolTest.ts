@@ -561,6 +561,12 @@ describe('Protocol Unit Tests', () => {
 			await send(cToken, 'setBorrowIndex', [benchmarkIndexClose]);
 		};
 
+		it.only('gas test', async () => {
+			await setup(bn(3e10));
+			const tx = await send(rho, 'close', closeArgs);
+			console.log(tx.gasUsed);
+		});
+
 		it('should close swap and profit protocol', async () => {
 			await setup(bn(3e10));//3e10 * 2102400 /1e18 = ~6.3% annualized interest
 			await send(rho, 'close', closeArgs);
@@ -597,6 +603,28 @@ describe('Protocol Unit Tests', () => {
 			expect(userProfit).toEqNum(3.27e8);
 			expect(await call(rho, 'supplierLiquidity', [])).toEqNum(supplyAmount.sub(userProfit));
 			expect(await call(rho, 'supplyIndex', [])).toEqNum(0.9346e18);
+		});
+
+		it('should close late pay fixed swap w/o underflows even if user payout is 0', async () => {
+			await setup(swapFixedRate);
+
+			// fixedLeg >> floatLeg
+			await send(rho, 'advanceBlocksProtocol', [actualDuration.mul(100)]);
+
+			const res = await send(rho, 'close', closeArgs);
+			expect(res.events.CloseSwap.returnValues.userPayout).toEqNum('0');
+		});
+
+		it('should close late pay fixed swap w/o underflows even if user payout is the whole pool', async () => {
+			await setup(swapFixedRate);
+			const bal = await call(cToken, 'balanceOf', [rho._address]);
+
+			// floatLeg >> fixedLeg
+			await send(rho, 'advanceBlocksProtocol', [actualDuration.mul(100)]);
+			await send(cToken, 'setBorrowIndex', [mantissa(2)]);
+
+			const res = await send(rho, 'close', closeArgs);
+			expect(res.events.CloseSwap.returnValues.userPayout).toEqNum(bal);
 		});
 
 		// open swap, open second at end of first, close first.
@@ -682,6 +710,28 @@ describe('Protocol Unit Tests', () => {
 			expect(userProfit).toEqNum(-3.27e8);
 			expect(await call(rho, 'supplierLiquidity', [])).toEqNum(supplyAmount.sub(userProfit));
 			expect(await call(rho, 'supplyIndex', [])).toEqNum(1.0654e18);
+		});
+
+		it('should close late rec fixed swap without underflowing if very late, user payout is 0', async () => {
+			await setup(swapFixedRate);
+			
+			// floatLeg >> fixedLeg
+			await send(rho, 'advanceBlocksProtocol', [actualDuration.mul(100)]);
+			await send(cToken, 'setBorrowIndex', [mantissa(2)]);
+
+			const res = await send(rho, 'close', closeArgs);
+			expect(res.events.CloseSwap.returnValues.userPayout).toEqNum('0');
+		});
+
+		it('should close rec fixed swap if payout is whole pool', async () => {
+			await setup(swapFixedRate);
+			const bal = await call(cToken, 'balanceOf', [rho._address]);
+			
+			// fixedLeg >> floatLeg
+			await send(rho, 'advanceBlocksProtocol', [actualDuration.mul(100)]);
+
+			const res = await send(rho, 'close', closeArgs);
+			expect(res.events.CloseSwap.returnValues.userPayout).toEqNum(bal);
 		});
 
 		// open swap, open second at end of first, close first.

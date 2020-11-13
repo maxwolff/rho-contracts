@@ -11,6 +11,7 @@ interface CompInterface {
 interface CTokenInterface {
 	function transferFrom(address from, address to, uint256 value) external returns (bool);
     function transfer(address to, uint256 value) external returns (bool);
+    function balanceOf(address who) external returns (uint);
 
 	function borrowIndex() external view returns (uint);
 	function accrualBlockNumber() external view returns(uint);
@@ -207,7 +208,7 @@ contract Rho is RhoInterface, Math {
 		}
 		require(_lte(removeAmount, truedUpAccountValue), "Trying to remove more than account value");
 		CTokenAmount memory unlockedCollateral = _sub(supplierLiquidity, lockedCollateral);
-
+		
 		require(_lte(removeAmount, unlockedCollateral), "Removing more liquidity than is unlocked");
 		require(_lte(removeAmount, supplierLiquidity), "Removing more than total supplier liquidity");
 
@@ -358,9 +359,9 @@ contract Rho is RhoInterface, Math {
 			userCollateralCTokens,
 			owner
 		));
+		require(swaps[swapHash] == true, "No active swap found");
 		uint swapDuration = _sub(getBlockNumber(), initBlock);
 		require(swapDuration >= SWAP_MIN_DURATION, "Premature close swap");
-		require(swaps[swapHash] == true, "No active swap found");
 		Exp memory benchmarkIndexRatio = _div(benchmarkIndexStored, _exp(benchmarkIndexInit));
 
 		CTokenAmount memory userCollateral = CTokenAmount({val: userCollateralCTokens});
@@ -386,6 +387,11 @@ contract Rho is RhoInterface, Math {
 				cTokenExchangeRate
 			);
 		}
+		uint bal = cToken.balanceOf(address(this));
+		if (userPayout.val > bal) {
+			userPayout = CTokenAmount({val: bal});
+		}
+
 		emit CloseSwap(swapHash, owner, userPayout.val, benchmarkIndexStored.mantissa);
 		swaps[swapHash] = false;
 		transferOut(owner, userPayout);
@@ -400,15 +406,15 @@ contract Rho is RhoInterface, Math {
 		CTokenAmount memory userCollateral,
 		Exp memory cTokenExchangeRate
 	) internal returns (CTokenAmount memory userPayout) {
-		uint notionalReceivingFixedNew = _sub(notionalReceivingFixed, notionalAmount);
-		uint notionalPayingFloatNew = _sub(notionalPayingFloat, _mul(notionalAmount, benchmarkIndexRatio));
+		uint notionalReceivingFixedNew = _subToZero(notionalReceivingFixed, notionalAmount);
+		uint notionalPayingFloatNew = _subToZero(notionalPayingFloat, _mul(notionalAmount, benchmarkIndexRatio));
 
 		/* avgFixedRateReceiving = avgFixedRateReceiving * notionalReceivingFixed - swapFixedRate * notionalAmount / notionalReceivingFixedNew */
 		Exp memory avgFixedRateReceivingNew;
 		if (notionalReceivingFixedNew == 0){
 			avgFixedRateReceivingNew = _exp(0);
 		} else {
-			Exp memory numerator = _sub(_mul(avgFixedRateReceiving, notionalReceivingFixed), _mul(swapFixedRate, notionalAmount));
+			Exp memory numerator = _subToZero(_mul(avgFixedRateReceiving, notionalReceivingFixed), _mul(swapFixedRate, notionalAmount));
 			avgFixedRateReceivingNew = _div(numerator, notionalReceivingFixedNew);
 		}
 
@@ -419,7 +425,7 @@ contract Rho is RhoInterface, Math {
 
 		CTokenAmount memory fixedLeg = toCTokens(_mul(_mul(notionalAmount, swapDuration), swapFixedRate), cTokenExchangeRate);
 		CTokenAmount memory floatLeg = toCTokens(_mul(notionalAmount, _sub(benchmarkIndexRatio, ONE_EXP)), cTokenExchangeRate);
-		userPayout = _sub(_add(userCollateral, floatLeg), fixedLeg);
+		userPayout = _subToZero(_add(userCollateral, floatLeg), fixedLeg);
 
 		notionalReceivingFixed = notionalReceivingFixedNew;
 		notionalPayingFloat = notionalPayingFloatNew;
@@ -438,15 +444,15 @@ contract Rho is RhoInterface, Math {
 		CTokenAmount memory userCollateral,
 		Exp memory cTokenExchangeRate
 	) internal returns (CTokenAmount memory userPayout) {
-		uint notionalPayingFixedNew = _sub(notionalPayingFixed, notionalAmount);
-		uint notionalReceivingFloatNew = _sub(notionalReceivingFloat, _mul(notionalAmount, benchmarkIndexRatio));
+		uint notionalPayingFixedNew = _subToZero(notionalPayingFixed, notionalAmount);
+		uint notionalReceivingFloatNew = _subToZero(notionalReceivingFloat, _mul(notionalAmount, benchmarkIndexRatio));
 
 		/* avgFixedRatePaying = avgFixedRatePaying * notionalPayingFixed - swapFixedRate * notionalAmount / notionalReceivingFixedNew */
 		Exp memory avgFixedRatePayingNew;
 		if (notionalPayingFixedNew == 0) {
 			avgFixedRatePayingNew = _exp(0);
 		} else {
-			Exp memory numerator = _sub(_mul(avgFixedRatePaying, notionalPayingFixed), _mul(swapFixedRate, notionalAmount));
+			Exp memory numerator = _subToZero(_mul(avgFixedRatePaying, notionalPayingFixed), _mul(swapFixedRate, notionalAmount));
 			avgFixedRatePayingNew = _div(numerator, notionalReceivingFloatNew);
 		}
 
@@ -457,7 +463,7 @@ contract Rho is RhoInterface, Math {
 
 		CTokenAmount memory fixedLeg = toCTokens(_mul(_mul(notionalAmount, swapDuration), swapFixedRate), cTokenExchangeRate);
 		CTokenAmount memory floatLeg = toCTokens(_mul(notionalAmount, _sub(benchmarkIndexRatio, ONE_EXP)), cTokenExchangeRate);
-		userPayout = _sub(_add(userCollateral, fixedLeg), floatLeg);
+		userPayout = _subToZero(_add(userCollateral, fixedLeg), floatLeg);
 
 		notionalPayingFixed = notionalPayingFixedNew;
 		notionalReceivingFloat = notionalReceivingFloatNew;
@@ -468,6 +474,7 @@ contract Rho is RhoInterface, Math {
 	}
 
 	/* @dev Called internally at the beginning of external swap and liquidity provider functions.
+	 * WRITES TO STORAGE
 	 * Accounts for interest rate payments and adjust collateral requirements with the passage of time.
 	 * @return lockedCollateralNew : The amount of collateral the protocol needs to keep locked.
 	 */
@@ -542,11 +549,11 @@ contract Rho is RhoInterface, Math {
 		parBlocksPayingFixedNew = _sub(parBlocksPayingFixed, _mul(accruedBlocks, notionalPayingFixed));
 
 		// Par blocks can be negative during the first or last ever swap, so floor them to 0
-		uint minFloatToReceive = _mul(_floor(parBlocksPayingFixedNew), minFloatRate);
-		uint maxFloatToPay = _mul(_floor(parBlocksReceivingFixedNew), maxFloatRate);
+		uint minFloatToReceive = _mul(_toUint(parBlocksPayingFixedNew), minFloatRate);
+		uint maxFloatToPay = _mul(_toUint(parBlocksReceivingFixedNew), maxFloatRate);
 
-		uint fixedToReceive = _mul(_floor(parBlocksReceivingFixedNew), avgFixedRateReceiving);
-		uint fixedToPay = _mul(_floor(parBlocksPayingFixedNew), avgFixedRatePaying);
+		uint fixedToReceive = _mul(_toUint(parBlocksReceivingFixedNew), avgFixedRateReceiving);
+		uint fixedToPay = _mul(_toUint(parBlocksPayingFixedNew), avgFixedRatePaying);
 
 		uint minCredit = _add(fixedToReceive, minFloatToReceive);
 		uint maxDebt = _add(fixedToPay, maxFloatToPay);

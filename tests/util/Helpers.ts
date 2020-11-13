@@ -14,7 +14,7 @@ const mantissa = num => {
   return ethers.utils.bigNumberify(new BigNumber(num).times(1e18).toFixed());
 }
 
-const MAX_UINT = bn(2).pow(256).sub(1).toString();
+const MAX_UINT = bn(2).pow(256).sub(1).toHexString();
 
 const hashEncode = (args) => {
 	const web3 = new (require('web3'))();

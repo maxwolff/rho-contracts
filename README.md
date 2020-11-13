@@ -2,6 +2,8 @@
 
 An AMM interest rate swap protocol [spec](https://docs.google.com/document/d/1GwLj1i7xsREvoT-wZBJ3JKPPi7KUkr-bWvobaZMA2Lc/edit?usp=sharing).
 Uses CTokens as collateral. Interest rates can be benchmarked on either the collateral CToken, another CToken, or any contract with a `borrowIndex`.
+* Capped downside for user, theoretically uncapped upside.
+
 
 Run tests:
 * install `solc` version ^0.6.10

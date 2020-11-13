@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const util = require('util');
 const assert = require('assert');
-const { str, sendRPC } = require('../tests/util/Helpers.ts');
+const { str, sendRPC, MAX_UINT } = require('../tests/util/Helpers.ts');
 
 const writeNetworkFile = async (network, value) => {
     const networkFile = path.join('networks', `${network}.json`);
@@ -35,14 +35,15 @@ const deployProtocol = async (conf, network) => {
 		conf.range
 	]);
 	const rho = await deploy('Rho', [
-		"0xEBc0D4Ab4C3b95B3Ee4C84d30922E5EDC0c4BeA5", // model._address, 
+		model._address, 
 		cTokenAddr,
 		compAddr,
 		conf.minFloatMantissaPerBlock,
 		conf.maxFloatMantissaPerBlock,
 		conf.swapMinDuration,
 		conf.supplyMinDuration,
-		a1
+		a1,
+		conf.liquidityLimit
 	]);
 
 	const rhoLens = await deploy('RhoLensV1', [rho._address]);
@@ -61,7 +62,7 @@ const deployProtocol = async (conf, network) => {
 		// console.log("close", tx.events.CloseSwap)
 	}
 
-	return {'cToken': cTokenAddr, 'comp': compAddr, 'model': "0xEBc0D4Ab4C3b95B3Ee4C84d30922E5EDC0c4BeA5" /*model._address*/, 'rho': rho._address, 'rhoLens': rhoLens._address};
+	return {'cToken': cTokenAddr, 'comp': compAddr, 'model': model._address, 'rho': rho._address, 'rhoLens': rhoLens._address};
 };
 
 
@@ -71,21 +72,20 @@ const deployProtocol = async (conf, network) => {
 		slopeFactor: str(0.5e36),
 		range: str(2.5e10),
 		rateFactorSensitivity: str(1e15),
-		feeBase: str(5e9),
-		feeSensitivity: str(3e9),
+		feeBase: str(2e9),
+		feeSensitivity: str(2e9),
 
 		minFloatMantissaPerBlock: str(0),
 		maxFloatMantissaPerBlock: str(1e11),
+		liquidityLimit: str(1e12)//MAX_UINT
 	};
-
 	const conf = {
 		mainnet: {
 			...base,
 			swapMinDuration: str(345600), // 60 days in blocks
 			supplyMinDuration: str(172800), // 60 days in blocks
 			comp: "0xc00e94cb662c3520282e6f5717214004a7f26888",
-			cToken: "0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643"// cdai
-
+			cToken: "0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643",// cdai
 		},
 		development: {
 			...base,
@@ -101,8 +101,7 @@ const deployProtocol = async (conf, network) => {
 			comp: "0x61460874a7196d6a22d1ee4922473664b3e95270",
 			cToken: "0xf0d0eb522cfa50b716b3b1604c4f0fa6f04376ad",
 			admin: "0xc5Ea8C731aA7dB66Ffa91532Ee48f68419B49b48"
-		},
-		// mainnet
+		}
 	}
 
 	const network = saddle.network_config.network;
