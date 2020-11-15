@@ -1,0 +1,12 @@
+#!/bin/sh
+
+set -eox pipefail
+
+# Spawn a child process:
+# (ganache-cli) & pid=$!
+# in the background, sleep for 10 secs then kill that process
+# kill $pid
+# echo "ELLO"
+
+export PROVIDER="http://localhost:8545"
+yarn test tests/fork.ts

@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.6.10;
 
 interface InterestRateModelInterface {
@@ -51,19 +50,17 @@ contract InterestRateModel is InterestRateModelInterface {
 		uint lockedCollateralUnderlying,
 		uint supplierLiquidityUnderlying
 	) external override view returns (uint rate, int rateFactorNew) {
+		require(supplierLiquidityUnderlying != 0, "supplied liquidity 0");
 		uint rfDelta = div(mul(rateFactorSensitivity, orderNotional), supplierLiquidityUnderlying);
 		rateFactorNew = userPayingFixed ? add(rateFactorPrev, rfDelta) : sub(rateFactorPrev, rfDelta);
 
-		// num = range * rateFactor
 		int num = mul(rateFactorNew, range);
-
-		// denom = sqrt(rateFactor ^2 + slopeFactor)
 		uint denom = sqrt(add(square(rateFactorNew), slopeFactor));
 
-		// (num / denom) + yOffset
-		uint baseRate = floor(add(div(num, denom), yOffset));
+		uint baseRate = floor(add(div(num, denom), yOffset)); // can not be negative
 		uint fee = getFee(lockedCollateralUnderlying, supplierLiquidityUnderlying);
 
+		// base + yOffset +- fee
 		if (userPayingFixed) {
 			rate = add(baseRate, fee);
 		} else {
@@ -71,6 +68,7 @@ contract InterestRateModel is InterestRateModelInterface {
 				rate = sub(baseRate, fee);
 			} else {
 				rate = 0;
+				// if the rate is negative, don't push rate factor even lower
 				rateFactorNew = rateFactorPrev;
 			}
 		}
@@ -168,7 +166,7 @@ contract InterestRateModel is InterestRateModelInterface {
 
    	// ** INT => UINT MATH ** //
 
-
+   	// Set negative ints to 0
     function floor(int x) internal pure returns (uint) {
 		return x > 0 ? uint(x) : 0;
 	}

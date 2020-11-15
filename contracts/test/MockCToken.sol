@@ -1,35 +1,50 @@
-// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.6.10;
 
 import "../Rho.sol";
 import "./FaucetToken.sol";
 
-contract MockCToken is BenchmarkInterface, FaucetToken {
+interface MockCTokenInterface {
+	function borrowIndex() external view returns (uint);
+	function accrualBlockNumber() external view returns(uint);
+	function borrowRatePerBlock() external view returns(uint);
+	function exchangeRateStored() external view returns (uint);
+}
 
-	uint public borrowIndex = 1e18;
+contract MockCToken is FaucetToken, MockCTokenInterface {
+
+	uint public override borrowIndex = 1e18;
+	uint public override accrualBlockNumber = 100;
+	uint public override borrowRatePerBlock;
+
 	uint public exchangeRate;
 
-	constructor(uint initialExchangeRate, uint256 _initialAmount, string memory _tokenName, uint8 _decimalUnits, string memory _tokenSymbol)
+	constructor(
+		uint _initialExchangeRate,
+		uint _borrowRatePerBlockMantissa,
+		uint256 _initialAmount,
+		string memory _tokenName,
+		uint8 _decimalUnits,
+		string memory _tokenSymbol
+	)
 		public FaucetToken(_initialAmount, _tokenName, _decimalUnits, _tokenSymbol)
 	{
-		exchangeRate = initialExchangeRate * 1e18;
+		borrowRatePerBlock = _borrowRatePerBlockMantissa;
+		exchangeRate = _initialExchangeRate * 1e18;
 	}
 
 	function setBorrowIndex(uint borrowIndex_) public {
 		borrowIndex = borrowIndex_;
 	}
 
-	function getBorrowIndex() public view override returns (uint) {
-		return borrowIndex;
+	function setAccrualBlockNumber(uint bn) public {
+		accrualBlockNumber = bn;
 	}
 
-	function exchangeRateStored() public view returns (uint) {
+	function advanceBlocks(uint blocks) public {
+		accrualBlockNumber += blocks;
+	}
+
+	function exchangeRateStored() public override view returns (uint) {
 		return exchangeRate;
-	}
-}
-
-contract BadBenchmark is BenchmarkInterface {
-	function getBorrowIndex() public view override returns (uint) {
-		return 0;
 	}
 }

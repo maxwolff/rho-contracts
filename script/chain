@@ -1,0 +1,4 @@
+#!/bin/sh
+cd ../ganache-cli
+yarn run start --account "0x89f2b7b9671edd48acfd826412298ddb0ddc3368e73224baec9b67a27628dc83,100000000000000000000"
+#test acct: 0x0Fb412F5a763768E49765dA73a4E40D65F9Ba01a, 100 ETH

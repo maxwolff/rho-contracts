@@ -1,0 +1,15 @@
+#!/bin/sh
+
+set -e
+export network="$1"
+
+mkdir -p networks
+npx saddle compile
+#calls ./deploy.ts
+
+case $network in
+	development)
+		echo $(PROVIDER="http://localhost:8545" npx saddle script deploy -n $network);;
+	*) 
+		echo $(npx saddle script deploy -n $network);;
+esac

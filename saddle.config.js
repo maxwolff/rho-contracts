@@ -79,9 +79,34 @@ module.exports = {
         {env: "ACCOUNT"},
         {unlocked: 0}
       ]
-    }
+    },
+    kovan: {
+      providers: [
+        { env: "PROVIDER" },
+        { file: "~/.ethereum/kovan-url" },              // Load from given file with contents as the URL (e.g. https://infura.io/api-key)
+        { http: "https://kovan-eth.compound.finance" }
+      ],
+      web3: {
+        gas: [
+          { env: "GAS" },
+          { default: "4600000" }
+        ],
+        gas_price: [
+          { env: "GAS_PRICE" },
+          { default: "12000000000" }
+        ],
+        options: {
+          transactionConfirmationBlocks: 1,
+          transactionBlockTimeout: 5
+        }
+      },
+      accounts: [
+        { env: "ACCOUNT" },
+        { file: "~/.ethereum/kovan" }                   // Load from given file with contents as the private key (e.g. 0x...)
+      ]
+    },
   },
   scripts: {
-    'deploy': "script/deploy.ts"
+    "deploy": "script/deploy.ts"
   }
 }

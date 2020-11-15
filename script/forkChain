@@ -1,0 +1,6 @@
+#!/bin/sh
+ 
+# start chain for fork test
+cd ../ganache-cli
+#  checked out to jflatow/patches
+yarn start --fork "http://localhost:1337" --gasLimit 20000000 --unlock "0x32B2D4ec46D76Fc6dAbfe958fb0e0BD8db740C84" --unlock "0x25599DCbd434aF9A17D52444f71c92987fa97cfC" --unlock "0x7d6149aD9A573A6E2Ca6eBf7D4897c1B766841B4"

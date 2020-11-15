@@ -1,15 +1,23 @@
 # Rho
 
 An AMM interest rate swap protocol [spec](https://docs.google.com/document/d/1GwLj1i7xsREvoT-wZBJ3JKPPi7KUkr-bWvobaZMA2Lc/edit?usp=sharing).
-Uses CTokens as collateral. Interest rates can be benchmarked on either the collateral CToken, another CToken, or any contract with a `borrowIndex`.
+* Uses CTokens as collateral, and for interest rates.
+* Capped downside for user, theoretically uncapped upside.
+
 
 Run tests:
 * install `solc` version ^0.6.10
 * `yarn`
 * `yarn test`
 
+Run fork test:
+* node script/infuraProxy.js
+* script/forkChain
+* script/forkTest
+
 Deploy locally:
-* `PROVIDER="http://localhost:8545/" npx saddle -n development script deploy`
+* `script/chain`
+* `script/deploy development`
 
 Resources:
 * [Spreadsheet](https://docs.google.com/spreadsheets/d/1w2EEdeKWvx7haG0p8vp5h9kBmOGBXVOpb6UTZOOV1io/edit#gid=27052314)

@@ -1,52 +1,108 @@
-const { bn } = require('../tests/util/Helpers.ts');
+const fs = require('fs');
+const path = require('path');
+const util = require('util');
+const assert = require('assert');
+const { str, MAX_UINT } = require('../tests/util/Helpers.ts');
 
-const MIN_FLOAT_MANTISSA_PER_BLOCK = bn(0);
-const MAX_FLOAT_MANTISSA_PER_BLOCK = bn(1e11); // => 2.1024E17 per year via 2102400 blocks / year. ~21%, 3.5% (3.456E16) per 60 days (345600 blocks)
-const INIT_EXCHANGE_RATE = bn(2e8);
-const SWAP_MIN_DURATION = bn(345600);// 60 days in blocks, assuming 15s blocks
-const SUPPLY_MIN_DURATION = bn(172800);
-
-const yOffset = bn(2.5e10);
-const slopeFactor = bn(0.5e36);
-const range = bn(2.5e10);
-
-const rateFactorSensitivity = bn(7.5e13);
-const feeBase = bn(5e9);
-const feeSensitivity = bn(3e9);
-
-
-/* PROVIDER="http://localhost:8545/" npx saddle -n development script deploy */
-
-// **** LOCAL TEST DEPLOY **** //
-
-const deployProtocol = async (opts = {}) => {
-	const benchmark = opts.benchmark || (await deploy('MockCToken', [INIT_EXCHANGE_RATE, '0', 'token1', '18', 'Benchmark Token']));
-	const cTokenCollateral = opts.collat || (await deploy('MockCToken', [INIT_EXCHANGE_RATE, '0', 'token2', '18', 'Collateral Token']));
-	const comp = await deploy('FaucetToken', ['0', 'COMP', '18', 'Compound Governance Token']);
-
-	const model = await deploy('InterestRateModel', [
-		yOffset,
-		slopeFactor,
-		rateFactorSensitivity,
-		feeBase,
-		feeSensitivity,
-		range
-	]);
-	const rho = await deploy('Rho', [
-		model._address,
-		benchmark._address,
-		cTokenCollateral._address,
-		comp._address,
-		MIN_FLOAT_MANTISSA_PER_BLOCK,
-		MAX_FLOAT_MANTISSA_PER_BLOCK,
-		SWAP_MIN_DURATION,
-		SUPPLY_MIN_DURATION,
-		saddle.accounts[0]
-	]);
-
-	console.log({rho: rho._address, model: model._address, comp: comp._address})
+const writeNetworkFile = async (network, value) => {
+    const networkFile = path.join('networks', `${network}.json`);
+	await util.promisify(fs.writeFile)(networkFile, JSON.stringify(value, null, 4));
 };
 
+const deployProtocol = async (conf, network) => {
+	const a1 = conf.admin || saddle.accounts[0];
+
+	let cToken;
+	let cTokenAddr;
+	if (network == 'development') {
+		cToken = await deploy('MockCToken', [conf.initExchangeRate, conf.borrowRateMantissa, '0', 'token2', '18', 'Collateral Token']);
+		cTokenAddr = cToken._address;
+	} else {
+		cTokenAddr = conf.cToken;
+	}
+	const compAddr = conf.comp || (await deploy('FaucetToken', ['0', 'COMP', '18', 'Compound Governance Token']))._address;
+	const modelAddr = conf.model || (await deploy('InterestRateModel', [
+		conf.yOffset,
+		conf.slopeFactor,
+		conf.rateFactorSensitivity,
+		conf.feeBase,
+		conf.feeSensitivity,
+		conf.range
+	]))._address;
+	const rho = await deploy('Rho', [
+		modelAddr, 
+		cTokenAddr,
+		compAddr,
+		conf.minFloatMantissaPerBlock,
+		conf.maxFloatMantissaPerBlock,
+		conf.swapMinDuration,
+		conf.supplyMinDuration,
+		a1,
+		conf.liquidityLimit
+	]);
+
+	const rhoLensAddr = conf.rhoLens || (await deploy('RhoLensV1', [rho._address]))._address;
+
+	if (network == 'development') {
+		await send(cToken, 'allocateTo', [a1, str(500e10)]);
+		await send(cToken, 'approve', [rho._address, str(500e10)], { from: a1 });
+		await send(cToken, 'setAccrualBlockNumber', [0]);
+	}
+
+	return {'cToken': cTokenAddr, comp: compAddr, 'rho': rho._address, model: modelAddr, rhoLens: rhoLensAddr};
+};
+
+const main = async () => {
+	const base = {
+		yOffset: str(2.5e10),
+		slopeFactor: str(0.5e36),
+		range: str(2.5e10),
+		rateFactorSensitivity: str(1e15),
+		feeBase: str(2e9),
+		feeSensitivity: str(2e9),
+
+		minFloatMantissaPerBlock: str(0),
+		maxFloatMantissaPerBlock: str(1e11),
+		liquidityLimit: str(1e12)//MAX_UINT
+	};
+	const conf = {
+		mainnet: {
+			...base,
+			swapMinDuration: str(345600), // 60 days in blocks
+			supplyMinDuration: str(172800), // 60 days in blocks
+			comp: "0xc00e94cb662c3520282e6f5717214004a7f26888",
+			cToken: "0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643",// cdai
+		},
+		development: {
+			...base,
+			initExchangeRate: str(2e8),
+			borrowRateMantissa: str(1e10),
+			comp: null,
+			cToken: null
+		},
+		kovan: {
+			...base,
+			supplyMinDuration: str(5),
+			swapMinDuration: str(10),
+			comp: "0x61460874a7196d6a22d1ee4922473664b3e95270",
+			cToken: "0xf0d0eb522cfa50b716b3b1604c4f0fa6f04376ad",
+			admin: "0xc5Ea8C731aA7dB66Ffa91532Ee48f68419B49b48",
+			
+			model: "0x822a9EB2322097399Deea71163515e84a3BDd2c4"
+		}
+	}
+
+	const network = saddle.network_config.network;
+	assert(Object.keys(conf).includes(network), "Unsupported network");
+	console.log(conf[network])
+	const networkJson = await deployProtocol(conf[network], network);
+	console.log(networkJson)
+	await writeNetworkFile(network, networkJson);
+};
+
+
 (async () => {
-	await deployProtocol();
+	const rhoLensAddr = (await deploy('RhoLensV1', ["0xc081AC7b9f5Ed2016AF872d562509Fc2918716A7"]))._address;
+	console.log(rhoLensAddr);
+	// await main();
 })();

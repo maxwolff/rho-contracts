@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: UNLICENSED
 pragma experimental ABIEncoderV2;
 pragma solidity ^0.6.10;
 
@@ -10,25 +9,25 @@ contract MockRho is Rho {
 
 	constructor (
 		InterestRateModelInterface interestRateModel_,
-		BenchmarkInterface benchmark_,
-		CTokenInterface cTokenCollateral_,
-		IERC20 rho_,
+		CTokenInterface cToken_,
+		CompInterface comp_,
 		uint minFloatRateMantissa_,
 		uint maxFloatRateMantissa_,
 		uint swapMinDuration_,
 		uint supplyMinDuration_,
-		address admin_
+		address admin_,
+		uint liquidityLimitCTokens_
 	)
 		Rho(
 			interestRateModel_,
-			benchmark_,
-			cTokenCollateral_,
-			rho_,
+			cToken_,
+			comp_,
 			minFloatRateMantissa_,
 			maxFloatRateMantissa_,
 			swapMinDuration_,
 			supplyMinDuration_,
-			admin_
+			admin_,
+			liquidityLimitCTokens_
 		)
 		public {}
 
@@ -46,5 +45,13 @@ contract MockRho is Rho {
 
 	function advanceBlocks(uint blocks) public {
 		blockNumber = blockNumber + blocks;
+	}
+
+	function advanceBlocksProtocol(uint blocks) public {
+		advanceBlocks(blocks);
+
+		(bool worked, bytes memory _) = address(cToken).call(abi.encodeWithSignature("advanceBlocks(uint256)", blocks));
+		require(worked == true, "Advance blocks didnt work");
+		_;
 	}
 }

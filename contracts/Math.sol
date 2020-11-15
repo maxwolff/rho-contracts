@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.6.10;
 
 contract Types {
@@ -24,7 +23,7 @@ contract Math is Types {
     	return Exp({mantissa: num});
     }
 
-    function _floor(int a) pure internal returns (uint) {
+    function _toUint(int a) pure internal returns (uint) {
         return a > 0 ? uint(a) : 0;
     }
 
@@ -56,6 +55,30 @@ contract Math is Types {
 
     function _sub(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
         return Exp({mantissa: _sub(a.mantissa, b.mantissa)});
+    }
+
+    function _subToZero(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (CTokenAmount memory) {
+        if (b.val >= a.val) {
+            return CTokenAmount({val: 0});
+        } else {
+            return _sub(a,b);
+        }
+    }
+
+    function _subToZero(uint a, uint b) pure internal returns (uint) {
+        if (b >= a) {
+            return 0;
+        } else {
+            return _sub(a,b);
+        }
+    }
+
+    function _subToZero(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
+        if (b.mantissa >= a.mantissa) {
+            return Exp({mantissa: 0});
+        } else {
+            return _sub(a,b);
+        }
     }
 
     function _sub(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (CTokenAmount memory) {
@@ -131,14 +154,6 @@ contract Math is Types {
     function _div(uint a, uint b) pure internal returns (uint) {
         require(b > 0, "divide by zero");
         return a / b;
-    }
-
-    function _min(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
-        return a.mantissa < b.mantissa ? a : b;
-    }
-
-    function _max(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
-        return a.mantissa > b.mantissa ? a : b;
     }
 
 }
