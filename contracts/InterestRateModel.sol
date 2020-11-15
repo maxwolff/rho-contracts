@@ -1,14 +1,6 @@
 pragma solidity ^0.6.10;
 
-interface InterestRateModelInterface {
-	function getSwapRate(
-		int rateFactorPrev,
-		bool userPayingFixed,
-		uint orderNotional,
-		uint lockedCollateralUnderlying,
-		uint supplierLiquidityUnderlying
-	) external view returns (uint rate, int rateFactorNew);
-}
+import {InterestRateModelInterface} from "./RhoInterfaces.sol";
 
 contract InterestRateModel is InterestRateModelInterface {
 
@@ -57,7 +49,7 @@ contract InterestRateModel is InterestRateModelInterface {
 		int num = mul(rateFactorNew, range);
 		uint denom = sqrt(add(square(rateFactorNew), slopeFactor));
 
-		uint baseRate = floor(add(div(num, denom), yOffset)); // can not be negative
+		uint baseRate = toZero(add(div(num, denom), yOffset)); // can not be negative
 		uint fee = getFee(lockedCollateralUnderlying, supplierLiquidityUnderlying);
 
 		// base + yOffset +- fee
@@ -78,6 +70,8 @@ contract InterestRateModel is InterestRateModelInterface {
 	function getFee(uint lockedCollateralUnderlying, uint supplierLiquidityUnderlying) public view returns (uint) {
 		return add(feeBase, div(mul(feeSensitivity, lockedCollateralUnderlying), supplierLiquidityUnderlying));
 	}
+
+    // ** Interest Rate Model Math Library **//
 
     // Source: https://github.com/Uniswap/uniswap-v2-core/blob/master/contracts/libraries/Math.sol
     // babylonian method (https://en.wikipedia.org/wiki/Methods_of_computing_square_roots#Babylonian_method)
@@ -167,7 +161,7 @@ contract InterestRateModel is InterestRateModelInterface {
    	// ** INT => UINT MATH ** //
 
    	// Set negative ints to 0
-    function floor(int x) internal pure returns (uint) {
+    function toZero(int x) internal pure returns (uint) {
 		return x > 0 ? uint(x) : 0;
 	}
 
