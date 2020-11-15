@@ -71,16 +71,15 @@ describe('Protocol Integration Tests', () => {
 		({ model, cToken, rho, rhoLens, comp} = await deployProtocol({MockInterestRateModel: false}));
 		await prep(rho._address, supplyAmount, cToken, lp);
 		await send(cToken, 'setBorrowIndex', [benchmarkIndexInit]);
-		await send(rho, 'supply', [supplyAmount], {
-			from: lp,
-		});
 	});
 
 	it('open', async () => {
+		await send(rho, 'supply', [supplyAmount], {
+			from: lp,
+		});
 		await prep(rho._address, mantissa(1), cToken, a1);
 		const {swapFixedRateMantissa, userCollateralCTokens, protocolIsCollateralized} = await call(rhoLens, 'getHypotheticalOrderInfo', [true, mantissa(1)]);
 		const tx = await send(rho, 'openPayFixedSwap', [mantissa(1), swapFixedRateMantissa], {from: a1});
-
 		expect(tx.events.OpenSwap.returnValues.swapFixedRateMantissa).toEqNum(swapFixedRateMantissa);
 		expect(30000026517).toAlmostEqual(swapFixedRateMantissa);
 		expect(tx.events.OpenSwap.returnValues.userCollateralCTokens).toEqNum(userCollateralCTokens);
@@ -90,6 +89,9 @@ describe('Protocol Integration Tests', () => {
 	});
 
 	it('increment bororow index', async () => {
+		await send(rho, 'supply', [supplyAmount], {
+			from: lp,
+		});
 		expect(await call(rho, 'getBenchmarkIndex', [])).toEqNum(benchmarkIndexInit);
 		expect(await call(cToken, 'borrowRatePerBlock', [])).toEqNum(2e10);
 		await send(rho, 'advanceBlocks', [5000]);
@@ -561,7 +563,7 @@ describe('Protocol Unit Tests', () => {
 			await send(cToken, 'setBorrowIndex', [benchmarkIndexClose]);
 		};
 
-		it.only('gas test', async () => {
+		it.skip('gas test', async () => {
 			await setup(bn(3e10));
 			const tx = await send(rho, 'close', closeArgs);
 			console.log(tx.gasUsed);

@@ -13,7 +13,16 @@ contract RhoLensV1 is Math {
 		rho = rho_;
 	}
 
-	function getHypotheticalOrderInfo(bool userPayingFixed, uint notionalAmount) external view returns (uint swapFixedRateMantissa, uint userCollateralCTokens, uint userCollateralUnderlying, bool protocolIsCollateralized) {
+	function getHypotheticalOrderInfo(bool userPayingFixed, uint notionalAmount) 
+		external 
+		view 
+		returns (
+			uint swapFixedRateMantissa, 
+			uint userCollateralCTokens, 
+			uint userCollateralUnderlying, 
+			bool protocolIsCollateralized
+		)
+	{
 		(CTokenAmount memory lockedCollateral, CTokenAmount memory supplierLiquidity, Exp memory cTokenExchangeRate) = getSupplyCollateralState();
 		(Exp memory swapFixedRate,) = rho.getSwapRate(userPayingFixed, notionalAmount, lockedCollateral, supplierLiquidity, cTokenExchangeRate);
 		protocolIsCollateralized = true;
@@ -34,7 +43,15 @@ contract RhoLensV1 is Math {
 		return (swapFixedRate.mantissa, userCollateral.val, toUnderlying(userCollateral.val), protocolIsCollateralized);
 	}
 
-	function getSupplyCollateralState() public view returns (CTokenAmount memory lockedCollateral, CTokenAmount memory supplierLiquidity, Exp memory cTokenExchangeRate) {
+	function getSupplyCollateralState() 
+		public 
+		view 
+		returns (
+			CTokenAmount memory lockedCollateral, 
+			CTokenAmount memory supplierLiquidity, 
+			Exp memory cTokenExchangeRate
+		) 
+	{
 		cTokenExchangeRate = rho.getExchangeRate();
 
 		uint accruedBlocks = rho.getBlockNumber() - rho.lastAccrualBlock();
@@ -44,6 +61,19 @@ contract RhoLensV1 is Math {
 		Exp memory floatRate = _sub(benchmarkIndexRatio, ONE_EXP);
 
 		supplierLiquidity = rho.getSupplierLiquidity(accruedBlocks, floatRate, cTokenExchangeRate);
+	}
+
+	function getMarkets() 
+		public 
+		view 
+		returns (
+			uint notionalReceivingFixed,
+			uint notionalPayingFixed,
+			uint avgFixedRateReceiving,
+			uint avgFixedRatePaying
+		) 
+	{
+		return (rho.notionalReceivingFixed(), rho.notionalPayingFixed(), rho.avgFixedRateReceiving(), rho.avgFixedRatePaying());
 	}
 
 	function toUnderlying(uint cTokenAmt) public view returns (uint underlyingAmount) {

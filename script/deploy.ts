@@ -2,17 +2,12 @@ const fs = require('fs');
 const path = require('path');
 const util = require('util');
 const assert = require('assert');
-const { str, sendRPC, MAX_UINT } = require('../tests/util/Helpers.ts');
+const { str, MAX_UINT } = require('../tests/util/Helpers.ts');
 
 const writeNetworkFile = async (network, value) => {
     const networkFile = path.join('networks', `${network}.json`);
 	await util.promisify(fs.writeFile)(networkFile, JSON.stringify(value, null, 4));
- };
-
-const getCloseArgs = (openTx) => {
-	const vals = openTx.events.OpenSwap.returnValues;
-	return [vals.userPayingFixed, vals.benchmarkIndexInit, vals.initBlock, vals.swapFixedRateMantissa, vals.notionalAmount, vals.userCollateralCTokens, vals.owner];
-}
+};
 
 const deployProtocol = async (conf, network) => {
 	const a1 = conf.admin || saddle.accounts[0];
@@ -26,16 +21,16 @@ const deployProtocol = async (conf, network) => {
 		cTokenAddr = conf.cToken;
 	}
 	const compAddr = conf.comp || (await deploy('FaucetToken', ['0', 'COMP', '18', 'Compound Governance Token']))._address;
-	const model = await deploy('InterestRateModel', [
+	const modelAddr = conf.model || (await deploy('InterestRateModel', [
 		conf.yOffset,
 		conf.slopeFactor,
 		conf.rateFactorSensitivity,
 		conf.feeBase,
 		conf.feeSensitivity,
 		conf.range
-	]);
+	]))._address;
 	const rho = await deploy('Rho', [
-		model._address, 
+		modelAddr, 
 		cTokenAddr,
 		compAddr,
 		conf.minFloatMantissaPerBlock,
@@ -46,27 +41,18 @@ const deployProtocol = async (conf, network) => {
 		conf.liquidityLimit
 	]);
 
-	const rhoLens = await deploy('RhoLensV1', [rho._address]);
+	const rhoLensAddr = conf.rhoLens || (await deploy('RhoLensV1', [rho._address]))._address;
 
 	if (network == 'development') {
 		await send(cToken, 'allocateTo', [a1, str(500e10)]);
 		await send(cToken, 'approve', [rho._address, str(500e10)], { from: a1 });
 		await send(cToken, 'setAccrualBlockNumber', [0]);
-		await send(rho, 'supply', [str(50e10)], {from: a1});
-		await send(rho, 'openPayFixedSwap', [str(1e18), 4e10]);
-		// await sendRPC('evm_mineBlockNumber', [345600 + 100], saddle);
-		// const args = getCloseArgs(openTx);
-		// const tx = await send(rho, 'close', args);
-
-		// console.log("open", openTx.events.OpenSwap)
-		// console.log("close", tx.events.CloseSwap)
 	}
 
-	return {'cToken': cTokenAddr, 'comp': compAddr, 'model': model._address, 'rho': rho._address, 'rhoLens': rhoLens._address};
+	return {'cToken': cTokenAddr, comp: compAddr, 'rho': rho._address, model: modelAddr, rhoLens: rhoLensAddr};
 };
 
-
-(async () => {
+const main = async () => {
 	const base = {
 		yOffset: str(2.5e10),
 		slopeFactor: str(0.5e36),
@@ -100,7 +86,9 @@ const deployProtocol = async (conf, network) => {
 			swapMinDuration: str(10),
 			comp: "0x61460874a7196d6a22d1ee4922473664b3e95270",
 			cToken: "0xf0d0eb522cfa50b716b3b1604c4f0fa6f04376ad",
-			admin: "0xc5Ea8C731aA7dB66Ffa91532Ee48f68419B49b48"
+			admin: "0xc5Ea8C731aA7dB66Ffa91532Ee48f68419B49b48",
+			
+			model: "0x822a9EB2322097399Deea71163515e84a3BDd2c4"
 		}
 	}
 
@@ -110,4 +98,11 @@ const deployProtocol = async (conf, network) => {
 	const networkJson = await deployProtocol(conf[network], network);
 	console.log(networkJson)
 	await writeNetworkFile(network, networkJson);
+};
+
+
+(async () => {
+	const rhoLensAddr = (await deploy('RhoLensV1', ["0xc081AC7b9f5Ed2016AF872d562509Fc2918716A7"]))._address;
+	console.log(rhoLensAddr);
+	// await main();
 })();
