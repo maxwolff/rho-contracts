@@ -277,7 +277,7 @@ contract Rho is RhoInterface, Math {
 				cTokenExchangeRate
 			);
 		}
-		uint bal = ERC20Interface(address(cToken)).balanceOf(address(this));
+		uint bal = cToken.balanceOf(address(this));
 		if (userPayout.val > bal) {
 			userPayout = CTokenAmount({val: bal});
 		}
@@ -411,11 +411,11 @@ contract Rho is RhoInterface, Math {
 	}
 
 	function transferIn(address from, CTokenAmount memory cTokenAmount) internal {
-		require(ERC20Interface(address(cToken)).transferFrom(from, address(this), cTokenAmount.val) == true, "Transfer In Failed");
+		require(cToken.transferFrom(from, address(this), cTokenAmount.val) == true, "Transfer In Failed");
 	}
 
 	function transferOut(address to, CTokenAmount memory cTokenAmount) internal {
-		require(ERC20Interface(address(cToken)).transfer(to, cTokenAmount.val), "Transfer Out failed");
+		require(cToken.transfer(to, cTokenAmount.val), "Transfer Out failed");
 	}
 
 	// ** PUBLIC PURE HELPERS ** //

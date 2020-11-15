@@ -19,7 +19,7 @@ interface ERC20Interface {
     function balanceOf(address who) external returns (uint);
 }
 
-interface CTokenInterface {
+interface CTokenInterface is ERC20Interface {
 	function borrowIndex() external view returns (uint);
 	function accrualBlockNumber() external view returns(uint);
 	function borrowRatePerBlock() external view returns(uint);
