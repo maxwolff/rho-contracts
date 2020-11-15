@@ -1,25 +1,16 @@
+pragma experimental ABIEncoderV2;
 pragma solidity ^0.6.10;
 
-contract Types {
+import "./Types.sol";
 
-    /*@dev A type to store amounts of cTokens, to make sure they are not confused with amounts of the underlying */
-    struct CTokenAmount {
-        uint val;
-    }
-
-    /* @dev A type to store numbers scaled up by 18 decimals*/
-    struct Exp {
-        uint mantissa;
-    }
-}
-
-/* Always returns type of left side param */
+/* @dev A safe math lib for Rho data types. 
+   Note: always returns type of left side param */
 contract Math is Types {
 
 	uint constant EXP_SCALE = 1e18;
     Exp ONE_EXP = Exp({mantissa: EXP_SCALE});
 
-    function _exp(uint num) pure internal returns (Exp memory) {
+    function _toExp(uint num) pure internal returns (Exp memory) {
     	return Exp({mantissa: num});
     }
 
@@ -33,10 +24,6 @@ contract Math is Types {
 
     function _lte(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (bool) {
         return a.val <= b.val;
-    }
-
-    function _gt(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (bool) {
-        return a.val > b.val;
     }
 
     function _add(Exp memory a, Exp memory b) pure internal returns (Exp memory) {

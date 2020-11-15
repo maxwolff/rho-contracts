@@ -1,135 +1,25 @@
 pragma experimental ABIEncoderV2;
 pragma solidity ^0.6.10;
 
-import "./InterestRateModel.sol";
 import "./Math.sol";
+import {RhoInterface, CTokenInterface, ERC20Interface, InterestRateModelInterface} from "./RhoInterfaces.sol";
 
-interface CompInterface {
-    function transfer(address to, uint256 value) external returns (bool);
-}
-
-interface CTokenInterface {
-	function transferFrom(address from, address to, uint256 value) external returns (bool);
-    function transfer(address to, uint256 value) external returns (bool);
-    function balanceOf(address who) external returns (uint);
-
-	function borrowIndex() external view returns (uint);
-	function accrualBlockNumber() external view returns(uint);
-	function borrowRatePerBlock() external view returns(uint);
-	function exchangeRateStored() external view returns (uint);
-}
-
-interface RhoInterface {
-	function supply(uint cTokenSupplyAmount) external;
-	function remove(uint removeCTokenAmount) external;
-	function openPayFixedSwap(uint notionalAmount, uint maximumFixedRateMantissa) external returns (bytes32 swapHash);
-	function openReceiveFixedSwap(uint notionalAmount, uint minFixedRateMantissa) external returns (bytes32 swapHash);
-	function close(
-		bool userPayingFixed,
-		uint benchmarkIndexInit,
-		uint initBlock,
-		uint swapFixedRateMantissa,
-		uint notionalAmount,
-		uint userCollateralCTokens,
-		address owner
-	) external;
-	event Supply(address indexed supplier, uint cTokenSupplyAmount, uint newSupplyAmount);
-	event Remove(address indexed supplier, uint removeCTokenAmount, uint newSupplyValue);
-	event OpenSwap(
-		bytes32 indexed swapHash,
-		bool userPayingFixed,
-		uint benchmarkIndexInit,
-		uint initBlock,
-		uint swapFixedRateMantissa,
-		uint notionalAmount,
-		uint userCollateralCTokens,
-		address indexed owner
-	);
-	event CloseSwap(
-		bytes32 indexed swapHash,
-		address indexed owner,
-		uint userPayout,
-		uint benchmarkIndexFinal
-	);
-	event Accrue(uint supplierLiquidityNew, uint lockedCollateralNew);
-	event SetInterestRateModel(address newModel, address oldModel);
-	event SetPause(bool isPaused);
-	event AdminRenounced();
-	event CompTransferred(address dest, uint amount);
-	event SetCollateralRequirements(uint minFloatRateMantissa, uint maxFloatRateMantissa);
-	event AdminChanged(address oldAdmin, address newAdmin);
-	event SetLiquidityLimit(uint limit);
-}
-
-/* Notes:
+/* @dev:
  * CTokens are used as collateral. "Underlying" in Rho refers to the collateral CToken's underlying token.
- * An Exp is a data type with 18 decimals, used for scaling up and precise calculations.
-*/
-
+ * An Exp is a data type with 18 decimals, used for scaling up and precise calculations */
 contract Rho is RhoInterface, Math {
 
-	InterestRateModelInterface public interestRateModel;
 	CTokenInterface public immutable cToken;
-	CompInterface public immutable comp;
+	ERC20Interface public immutable comp;
 
 	uint public immutable SWAP_MIN_DURATION;
 	uint public immutable SUPPLY_MIN_DURATION;
-
-	uint public lastAccrualBlock;
-	Exp public benchmarkIndexStored;
-
-	/* Notional size of each leg, one adjusting for compounding and one static */
-	uint public notionalReceivingFixed;
-	uint public notionalPayingFloat;
-
-	uint public notionalPayingFixed;
-	uint public notionalReceivingFloat;
-
-	/* Measure of outstanding swap obligations. 1 Unit = 1e18 notional * 1 block. Used to calculate collateral requirements */
-	int public parBlocksReceivingFixed;
-	int public parBlocksPayingFixed;
-
-	/* Per block fixed / float interest rates used in collateral calculations */
-	Exp public avgFixedRateReceiving;
-	Exp public avgFixedRatePaying;
-
-	/* Per block float rate bounds used in collateral calculations */
-	Exp public maxFloatRate;
-	Exp public minFloatRate;
-
-	/* Protocol PnL */
-	uint public supplyIndex;
-	CTokenAmount public supplierLiquidity;
-
-	int public rateFactor;// for interest rate model
-
-	address public admin;
-	bool public isPaused;
-	CTokenAmount public liquidityLimit; // safety feature
-
-	mapping(address => SupplyAccount) public supplyAccounts;
-	mapping(bytes32 => bool) public swaps;
-
-	struct SupplyAccount {
-		CTokenAmount amount;
-		uint lastBlock;
-		uint index;
-	}
-
-	struct Swap {
-		bool userPayingFixed;
-		uint notionalAmount;
-		uint swapFixedRateMantissa;
-		uint benchmarkIndexInit;
-		uint userCollateralCTokens;
-		uint initBlock;
-		address owner;
-	}
+	uint public immutable MIN_SWAP_NOTIONAL = 1e18;
 
 	constructor (
 		InterestRateModelInterface interestRateModel_,
 		CTokenInterface cToken_,
-		CompInterface comp_,
+		ERC20Interface comp_,
 		uint minFloatRateMantissa_,
 		uint maxFloatRateMantissa_,
 		uint swapMinDuration_,
@@ -142,14 +32,14 @@ contract Rho is RhoInterface, Math {
 		interestRateModel = interestRateModel_;
 		cToken = cToken_;
 		comp = comp_;
-		minFloatRate = _exp(minFloatRateMantissa_);
-		maxFloatRate = _exp(maxFloatRateMantissa_);
+		minFloatRate = _toExp(minFloatRateMantissa_);
+		maxFloatRate = _toExp(maxFloatRateMantissa_);
 		SWAP_MIN_DURATION = swapMinDuration_;
 		SUPPLY_MIN_DURATION = supplyMinDuration_;
 		admin = admin_;
 
 		supplyIndex = ONE_EXP.mantissa;
-		benchmarkIndexStored = _exp(cToken_.borrowIndex());
+		benchmarkIndexStored = _toExp(cToken_.borrowIndex());
 		isPaused = false;
 		liquidityLimit = CTokenAmount({val:liquidityLimitCTokens_});
 	}
@@ -241,7 +131,7 @@ contract Rho is RhoInterface, Math {
 	*/
 	function openInternal(bool userPayingFixed, uint notionalAmount, uint fixedRateLimitMantissa) internal returns (bytes32 swapHash) {
 		require(isPaused == false, "Market paused");
-		require(notionalAmount >= 1e18, "Swap notional amount must exceed minimum");
+		require(notionalAmount >= MIN_SWAP_NOTIONAL, "Swap notional amount must exceed minimum");
 		Exp memory cTokenExchangeRate = getExchangeRate();
 
 		CTokenAmount memory lockedCollateral = accrue(cTokenExchangeRate);
@@ -362,10 +252,10 @@ contract Rho is RhoInterface, Math {
 		require(swaps[swapHash] == true, "No active swap found");
 		uint swapDuration = _sub(getBlockNumber(), initBlock);
 		require(swapDuration >= SWAP_MIN_DURATION, "Premature close swap");
-		Exp memory benchmarkIndexRatio = _div(benchmarkIndexStored, _exp(benchmarkIndexInit));
+		Exp memory benchmarkIndexRatio = _div(benchmarkIndexStored, _toExp(benchmarkIndexInit));
 
 		CTokenAmount memory userCollateral = CTokenAmount({val: userCollateralCTokens});
-		Exp memory swapFixedRate = _exp(swapFixedRateMantissa);
+		Exp memory swapFixedRate = _toExp(swapFixedRateMantissa);
 
 		CTokenAmount memory userPayout;
 		if (userPayingFixed) {
@@ -412,7 +302,7 @@ contract Rho is RhoInterface, Math {
 		/* avgFixedRateReceiving = avgFixedRateReceiving * notionalReceivingFixed - swapFixedRate * notionalAmount / notionalReceivingFixedNew */
 		Exp memory avgFixedRateReceivingNew;
 		if (notionalReceivingFixedNew == 0){
-			avgFixedRateReceivingNew = _exp(0);
+			avgFixedRateReceivingNew = _toExp(0);
 		} else {
 			Exp memory numerator = _subToZero(_mul(avgFixedRateReceiving, notionalReceivingFixed), _mul(swapFixedRate, notionalAmount));
 			avgFixedRateReceivingNew = _div(numerator, notionalReceivingFixedNew);
@@ -450,7 +340,7 @@ contract Rho is RhoInterface, Math {
 		/* avgFixedRatePaying = avgFixedRatePaying * notionalPayingFixed - swapFixedRate * notionalAmount / notionalReceivingFixedNew */
 		Exp memory avgFixedRatePayingNew;
 		if (notionalPayingFixedNew == 0) {
-			avgFixedRatePayingNew = _exp(0);
+			avgFixedRatePayingNew = _toExp(0);
 		} else {
 			Exp memory numerator = _subToZero(_mul(avgFixedRatePaying, notionalPayingFixed), _mul(swapFixedRate, notionalAmount));
 			avgFixedRatePayingNew = _div(numerator, notionalReceivingFloatNew);
@@ -521,7 +411,6 @@ contract Rho is RhoInterface, Math {
 	}
 
 	function transferIn(address from, CTokenAmount memory cTokenAmount) internal {
-		// TODO: Add more validation?
 		require(cToken.transferFrom(from, address(this), cTokenAmount.val) == true, "Transfer In Failed");
 	}
 
@@ -594,7 +483,7 @@ contract Rho is RhoInterface, Math {
 			toUnderlying(lockedCollateral, cTokenExchangeRate),
 			toUnderlying(supplierLiquidity_, cTokenExchangeRate)
 		);
-		return (_exp(ratePerBlockMantissa), rateFactorNew);
+		return (_toExp(ratePerBlockMantissa), rateFactorNew);
 	}
 
 	// @dev The amount that must be locked up for the payFixed leg of a swap paying fixed. Used to calculate both the protocol and user's collateral.
@@ -613,8 +502,9 @@ contract Rho is RhoInterface, Math {
 		return toCTokens(amt, cTokenExchangeRate);
 	}
 
+	// @dev Interpolates to get the current borrow index from a compound CToken (or some other similar interface)
 	function getBenchmarkIndex() public view returns (Exp memory) {
-		Exp memory borrowIndex = _exp(cToken.borrowIndex());
+		Exp memory borrowIndex = _toExp(cToken.borrowIndex());
 		require(borrowIndex.mantissa != 0, "Benchmark index is zero");
 		uint accrualBlockNumber = cToken.accrualBlockNumber();
 		require(getBlockNumber() >= accrualBlockNumber, "Bn decreasing");
@@ -623,14 +513,14 @@ contract Rho is RhoInterface, Math {
 		if (blockDelta == 0) {
 			return borrowIndex;
 		} else {
-			Exp memory borrowRateMantissa = _exp(cToken.borrowRatePerBlock());
+			Exp memory borrowRateMantissa = _toExp(cToken.borrowRatePerBlock());
 			Exp memory simpleInterestFactor = _mul(borrowRateMantissa, blockDelta);
 			return _mul(borrowIndex, _add(simpleInterestFactor, ONE_EXP));
 		}
 	}
 
 	function getExchangeRate() public view returns (Exp memory) {
-		return _exp(cToken.exchangeRateStored());
+		return _toExp(cToken.exchangeRateStored());
 	}
 
 	function getBlockNumber() public view virtual returns (uint) {
@@ -639,7 +529,7 @@ contract Rho is RhoInterface, Math {
 
 	/** ADMIN FUNCTIONS **/
 
-	function _setInterestRateModel(InterestRateModel newModel) external {
+	function _setInterestRateModel(InterestRateModelInterface newModel) external {
 		require(msg.sender == admin, "Must be admin to set interest rate model");
 		require(newModel != interestRateModel, "Resetting to same model");
 		emit SetInterestRateModel(address(newModel), address(interestRateModel));
@@ -651,8 +541,8 @@ contract Rho is RhoInterface, Math {
 		require(minFloatRateMantissa_ < maxFloatRateMantissa_, "Min float rate must be below max float rate");
 
 		emit SetCollateralRequirements(minFloatRateMantissa_, maxFloatRateMantissa_);
-		minFloatRate = _exp(minFloatRateMantissa_);
-		maxFloatRate = _exp(maxFloatRateMantissa_);
+		minFloatRate = _toExp(minFloatRateMantissa_);
+		maxFloatRate = _toExp(maxFloatRateMantissa_);
 	}
 
 	function _setLiquidityLimit(uint limit_) external {

@@ -4,7 +4,7 @@ pragma solidity ^0.6.10;
 import "./Rho.sol";
 import "./Math.sol";
 
-/* @dev A utility view contract */
+/* @dev A utility view contract for front-ends to use. Not part of the protocol. */
 contract RhoLensV1 is Math {
 
 	Rho public immutable rho;
@@ -27,18 +27,16 @@ contract RhoLensV1 is Math {
 		(Exp memory swapFixedRate,) = rho.getSwapRate(userPayingFixed, notionalAmount, lockedCollateral, supplierLiquidity, cTokenExchangeRate);
 		protocolIsCollateralized = true;
 		CTokenAmount memory userCollateral;
+		CTokenAmount memory lockedCollateralHypothetical;
 		if (userPayingFixed) {
 			userCollateral = rho.getPayFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate);
-			CTokenAmount memory lockedCollateralHypothetical = _add(lockedCollateral, rho.getReceiveFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
-			if (_gt(lockedCollateralHypothetical, supplierLiquidity)) {
-				protocolIsCollateralized = false;
-			}
+			lockedCollateralHypothetical = _add(lockedCollateral, rho.getReceiveFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
 		} else {
 			userCollateral = rho.getReceiveFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate);
-			CTokenAmount memory lockedCollateralHypothetical = _add(lockedCollateral, rho.getPayFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
-			if(_gt(lockedCollateralHypothetical, supplierLiquidity)) {
-				protocolIsCollateralized = false;
-			}
+			lockedCollateralHypothetical = _add(lockedCollateral, rho.getPayFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
+		}
+		if(_lt(supplierLiquidity, lockedCollateralHypothetical)) {
+			protocolIsCollateralized = false;
 		}
 		return (swapFixedRate.mantissa, userCollateral.val, toUnderlying(userCollateral.val), protocolIsCollateralized);
 	}
@@ -57,7 +55,7 @@ contract RhoLensV1 is Math {
 		uint accruedBlocks = rho.getBlockNumber() - rho.lastAccrualBlock();
 		(lockedCollateral,,) = rho.getLockedCollateral(accruedBlocks, cTokenExchangeRate);
 
-		Exp memory benchmarkIndexRatio = _div(rho.getBenchmarkIndex(), _exp(rho.benchmarkIndexStored()));
+		Exp memory benchmarkIndexRatio = _div(rho.getBenchmarkIndex(), _toExp(rho.benchmarkIndexStored()));
 		Exp memory floatRate = _sub(benchmarkIndexRatio, ONE_EXP);
 
 		supplierLiquidity = rho.getSupplierLiquidity(accruedBlocks, floatRate, cTokenExchangeRate);
