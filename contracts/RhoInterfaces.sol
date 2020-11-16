@@ -57,6 +57,7 @@ abstract contract RhoInterface is Types {
 		bytes32 indexed swapHash,
 		address indexed owner,
 		uint userPayout,
+		uint penalty,
 		uint benchmarkIndexFinal
 	);
 	event Accrue(uint supplierLiquidityNew, uint lockedCollateralNew);
