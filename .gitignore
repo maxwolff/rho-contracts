@@ -2,9 +2,10 @@
 *.tsbuilt*
 *.DS_Store*
 build
-.build/contracts.json
 .build/test.json
 .build/development.json
+.build/contracts.json
+networks/development.json
 yarn-error.log
 .solcache
 .saddle_history

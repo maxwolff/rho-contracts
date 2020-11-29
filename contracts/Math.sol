@@ -10,106 +10,106 @@ contract Math is Types {
 	uint constant EXP_SCALE = 1e18;
     Exp ONE_EXP = Exp({mantissa: EXP_SCALE});
 
-    function _toExp(uint num) pure internal returns (Exp memory) {
+    function toExp_(uint num) pure internal returns (Exp memory) {
     	return Exp({mantissa: num});
     }
 
-    function _toUint(int a) pure internal returns (uint) {
+    function toUint_(int a) pure internal returns (uint) {
         return a > 0 ? uint(a) : 0;
     }
 
-    function _lt(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (bool) {
+    function lt_(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (bool) {
         return a.val < b.val;
     }
 
-    function _lte(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (bool) {
+    function lte_(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (bool) {
         return a.val <= b.val;
     }
 
-    function _add(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
-        return Exp({mantissa: _add(a.mantissa, b.mantissa)});
+    function add_(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
+        return Exp({mantissa: add_(a.mantissa, b.mantissa)});
     }
 
-    function _add(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (CTokenAmount memory) {
-        return CTokenAmount({val: _add(a.val, b.val)});
+    function add_(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (CTokenAmount memory) {
+        return CTokenAmount({val: add_(a.val, b.val)});
     }
 
-    function _add(uint a, uint b) pure internal returns (uint) {
+    function add_(uint a, uint b) pure internal returns (uint) {
         uint c = a + b;
         require(c >= a, "addition overflow");
         return c;
     }
 
-    function _sub(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
-        return Exp({mantissa: _sub(a.mantissa, b.mantissa)});
+    function sub_(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
+        return Exp({mantissa: sub_(a.mantissa, b.mantissa)});
     }
 
-    function _subToZero(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (CTokenAmount memory) {
+    function subToZero_(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (CTokenAmount memory) {
         if (b.val >= a.val) {
             return CTokenAmount({val: 0});
         } else {
-            return _sub(a,b);
+            return sub_(a,b);
         }
     }
 
-    function _subToZero(uint a, uint b) pure internal returns (uint) {
+    function subToZero_(uint a, uint b) pure internal returns (uint) {
         if (b >= a) {
             return 0;
         } else {
-            return _sub(a,b);
+            return sub_(a,b);
         }
     }
 
-    function _subToZero(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
+    function subToZero_(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
         if (b.mantissa >= a.mantissa) {
             return Exp({mantissa: 0});
         } else {
-            return _sub(a,b);
+            return sub_(a,b);
         }
     }
 
-    function _sub(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (CTokenAmount memory) {
-        return CTokenAmount({val: _sub(a.val, b.val)});
+    function sub_(CTokenAmount memory a, CTokenAmount memory b) pure internal returns (CTokenAmount memory) {
+        return CTokenAmount({val: sub_(a.val, b.val)});
     }
 
-    function _sub(uint a, uint b) pure internal returns (uint) {
+    function sub_(uint a, uint b) pure internal returns (uint) {
         require(b <= a, "subtraction underflow");
         return a - b;
     }
 
-    function _sub(int a, uint b) pure internal returns (int) {
+    function sub_(int a, uint b) pure internal returns (int) {
         int c = a - int(b);
         require(a >= c, "int - uint underflow");
         return c;
     }
 
-    function _add(int a, uint b) pure internal returns (int) {
+    function add_(int a, uint b) pure internal returns (int) {
         int c = a + int(b);
         require(a <= c, "int + uint overflow");
         return c;
     }
 
-    function _mul(uint a, CTokenAmount memory b) pure internal returns (uint) {
-        return _mul(a, b.val);
+    function mul_(uint a, CTokenAmount memory b) pure internal returns (uint) {
+        return mul_(a, b.val);
     }
 
-    function _mul(CTokenAmount memory a, uint b) pure internal returns (CTokenAmount memory) {
-        return CTokenAmount({val: _mul(a.val, b)});
+    function mul_(CTokenAmount memory a, uint b) pure internal returns (CTokenAmount memory) {
+        return CTokenAmount({val: mul_(a.val, b)});
     }
 
-    function _mul(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
-        return Exp({mantissa: _mul(a.mantissa, b.mantissa) / EXP_SCALE});
+    function mul_(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
+        return Exp({mantissa: mul_(a.mantissa, b.mantissa) / EXP_SCALE});
     }
 
-    function _mul(Exp memory a, uint b) pure internal returns (Exp memory) {
-        return Exp({mantissa: _mul(a.mantissa, b)});
+    function mul_(Exp memory a, uint b) pure internal returns (Exp memory) {
+        return Exp({mantissa: mul_(a.mantissa, b)});
     }
 
-    function _mul(uint a, Exp memory b) pure internal returns (uint) {
-        return _mul(a, b.mantissa) / EXP_SCALE;
+    function mul_(uint a, Exp memory b) pure internal returns (uint) {
+        return mul_(a, b.mantissa) / EXP_SCALE;
     }
 
-    function _mul(uint a, uint b) pure internal returns (uint) {
+    function mul_(uint a, uint b) pure internal returns (uint) {
         if (a == 0 || b == 0) {
             return 0;
         }
@@ -118,27 +118,27 @@ contract Math is Types {
         return c;
     }
 
-    function _div(uint a, CTokenAmount memory b) pure internal returns (uint) {
-        return _div(a, b.val);
+    function div_(uint a, CTokenAmount memory b) pure internal returns (uint) {
+        return div_(a, b.val);
     }
 
-    function _div(CTokenAmount memory a, uint b) pure internal returns (CTokenAmount memory) {
-        return CTokenAmount({val: _div(a.val, b)});
+    function div_(CTokenAmount memory a, uint b) pure internal returns (CTokenAmount memory) {
+        return CTokenAmount({val: div_(a.val, b)});
     }
 
-    function _div(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
-        return Exp({mantissa: _div(_mul(a.mantissa, EXP_SCALE), b.mantissa)});
+    function div_(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
+        return Exp({mantissa: div_(mul_(a.mantissa, EXP_SCALE), b.mantissa)});
     }
 
-    function _div(Exp memory a, uint b) pure internal returns (Exp memory) {
-        return Exp({mantissa: _div(a.mantissa, b)});
+    function div_(Exp memory a, uint b) pure internal returns (Exp memory) {
+        return Exp({mantissa: div_(a.mantissa, b)});
     }
 
-    function _div(uint a, Exp memory b) pure internal returns (uint) {
-        return _div(_mul(a, EXP_SCALE), b.mantissa);
+    function div_(uint a, Exp memory b) pure internal returns (uint) {
+        return div_(mul_(a, EXP_SCALE), b.mantissa);
     }
 
-    function _div(uint a, uint b) pure internal returns (uint) {
+    function div_(uint a, uint b) pure internal returns (uint) {
         require(b > 0, "divide by zero");
         return a / b;
     }

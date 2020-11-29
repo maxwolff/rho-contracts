@@ -5,7 +5,8 @@
   },
   "scripts": {
     "test": "yarn compile && npx saddle test",
-    "compile": "./script/compile"
+    "compile": "./script/compile",
+    "console": "npx -n --experimental-repl-await saddle console"
   },
   "resolutions": {
     "scrypt.js": "https://registry.npmjs.org/@compound-finance/ethereumjs-wallet/-/ethereumjs-wallet-0.6.3.tgz"

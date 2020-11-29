@@ -10,7 +10,7 @@ contract MockRho is Rho {
 	constructor (
 		InterestRateModelInterface interestRateModel_,
 		CTokenInterface cToken_,
-		ERC20Interface comp_,
+		CompInterface comp_,
 		uint minFloatRateMantissa_,
 		uint maxFloatRateMantissa_,
 		uint swapMinDuration_,

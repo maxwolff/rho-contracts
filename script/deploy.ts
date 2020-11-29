@@ -4,8 +4,8 @@ const util = require('util');
 const assert = require('assert');
 const { str, MAX_UINT } = require('../tests/util/Helpers.ts');
 
-const writeNetworkFile = async (network, value) => {
-    const networkFile = path.join('networks', `${network}.json`);
+const writeNetworkFile = async (network, value, dir) => {
+    const networkFile = path.join(dir, `${network}.json`);
 	await util.promisify(fs.writeFile)(networkFile, JSON.stringify(value, null, 4));
 };
 
@@ -75,6 +75,8 @@ const main = async () => {
 		},
 		development: {
 			...base,
+			swapMinDuration: str(10),
+			supplyMinDuration: str(5),
 			initExchangeRate: str(2e8),
 			borrowRateMantissa: str(1e10),
 			comp: null,
@@ -97,12 +99,11 @@ const main = async () => {
 	console.log(conf[network])
 	const networkJson = await deployProtocol(conf[network], network);
 	console.log(networkJson)
-	await writeNetworkFile(network, networkJson);
+	await writeNetworkFile(network, networkJson, 'networks');
+	await writeNetworkFile(network, {"RhoLensV1": networkJson.rhoLens, "Rho": networkJson.rho}, '.build');
 };
 
 
 (async () => {
-	const rhoLensAddr = (await deploy('RhoLensV1', ["0xc081AC7b9f5Ed2016AF872d562509Fc2918716A7"]))._address;
-	console.log(rhoLensAddr);
-	// await main();
+	await main();
 })();
