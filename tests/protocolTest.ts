@@ -6,6 +6,8 @@ const INIT_EXCHANGE_RATE = bn(2e8);
 const SWAP_MIN_DURATION = bn(345600);// 60 days in blocks, assuming 15s blocks
 const SUPPLY_MIN_DURATION = bn(172800);
 const BLOCKS_PER_YEAR = bn(2102400);
+const CLOSE_GRACE_PERIOD_BLOCKS = bn(3000);
+const CLOSE_PENALTY_PER_BLOCK_MANTISSA = bn(1e14);
 
 const yOffset = bn(2.5e10);
 const slopeFactor = bn(0.5e36);
@@ -566,7 +568,7 @@ describe('Protocol Unit Tests', () => {
 		it.skip('gas test', async () => {
 			await setup(bn(3e10));
 			const tx = await send(rho, 'close', closeArgs);
-			console.log(tx.gasUsed);
+			console.log(tx.gasUsed); // 737100
 		});
 
 		it('should close swap and profit protocol', async () => {
@@ -615,6 +617,7 @@ describe('Protocol Unit Tests', () => {
 
 			const res = await send(rho, 'close', closeArgs);
 			expect(res.events.CloseSwap.returnValues.userPayout).toEqNum('0');
+			expect(res.events.CloseSwap.returnValues.penalty).toEqNum('0');
 		});
 
 		it('should close late pay fixed swap w/o underflows even if user payout is the whole pool', async () => {
@@ -626,7 +629,10 @@ describe('Protocol Unit Tests', () => {
 			await send(cToken, 'setBorrowIndex', [mantissa(2)]);
 
 			const res = await send(rho, 'close', closeArgs);
-			expect(res.events.CloseSwap.returnValues.userPayout).toEqNum(bal);
+
+			// very late close, should do full penalty
+			expect(res.events.CloseSwap.returnValues.userPayout).toEqNum(0);
+			expect(res.events.CloseSwap.returnValues.penalty).toEqNum(bal);
 		});
 
 		// open swap, open second at end of first, close first.
@@ -667,19 +673,20 @@ describe('Protocol Unit Tests', () => {
 		let bal1;
 		let closeArgs;
 
-		const setup = async (rate) => {
+		const setup = async (rate, opts = {}) => {
 			await prep(rho._address, mantissa(1), cToken, a1);
 			bal1 = await call(cToken, 'balanceOf',[a1]);
 			await send(model, 'setRate', [rate]);
 			const tx0 = await send(rho, 'openReceiveFixedSwap', [orderSize, rate], { from: a1 });
 			closeArgs = getCloseArgs(tx0);
-			await send(rho, 'advanceBlocksProtocol', [actualDuration]);
+			const duration = opts.duration || actualDuration;
+			await send(rho, 'advanceBlocksProtocol', [duration]);
 			await send(cToken, 'setBorrowIndex', [benchmarkIndexClose]);
 		};
 
 		it('should close swap and profit user', async () => {
 			await setup(bn(3e10));//3e10 * 2102400 /1e18 = ~6.3% annualized interest
-			await send(rho, 'close', closeArgs);
+			const tx = await send(rho, 'close', closeArgs);
 
 			expect(
 				await call(rho, 'avgFixedRatePaying', [])
@@ -696,8 +703,8 @@ describe('Protocol Unit Tests', () => {
 			expect(userProfit).toEqNum(0.19e8);
 			expect(await call(rho, 'supplierLiquidity', [])).toEqNum(supplyAmount.sub(userProfit));
 			expect(await call(rho, 'supplyIndex', [])).toEqNum(0.9962e18);
+			expect(tx.events.CloseSwap.returnValues.penalty).toEqNum('0');
 		});
-
 
 		it('should close swap and profit protocol', async () => {
 			await setup(swapFixedRate);
@@ -713,6 +720,38 @@ describe('Protocol Unit Tests', () => {
 			expect(await call(rho, 'supplierLiquidity', [])).toEqNum(supplyAmount.sub(userProfit));
 			expect(await call(rho, 'supplyIndex', [])).toEqNum(1.0654e18);
 		});
+
+		it('should close w penalty', async () => {
+			const duration = bn(SWAP_MIN_DURATION).add(CLOSE_GRACE_PERIOD_BLOCKS.mul(2));
+			await setup(bn(3e10), {duration});
+			let bal1Liq = bn(await call(cToken, 'balanceOf',[root]));
+			
+			const res = await send(rho, 'close', closeArgs);
+			/* floatLeg = 10e18 * (1.212 / 1.2 - 1) = 0.1e18
+			 * fixedLeg = 10e18 * (345600 + 6000)  * 3e10 / 1e18 = 1.0548e17
+			 * userProfit = (0.10548e18 - 0.1e18) / 2e8 = 0.274e8
+			 */
+
+			let bal2Liq = bn(await call(cToken, 'balanceOf',[root]));
+			let bal2 = bn(await call(cToken, 'balanceOf',[a1]));
+			
+
+			// 3000 * 1e14 / 1e18 = 30% penalty
+			// userPayout + prevCollateral
+			// 0.274e8 + 12.096e8 = 12.37e8
+			// * .3 = 3.711e8 payout for closer
+			// * .7 = 8.659e8 payout for user
+			const closerProfit = bal2Liq.sub(bal1Liq);
+			const userDiff = bal2.sub(bal1);
+			
+			expect(closerProfit).toEqNum(3.711e8);
+			expect(res.events.CloseSwap.returnValues.penalty).toEqNum(closerProfit);
+
+			expect(userDiff).toEqNum(-3.437e8);
+			// diff + prevCollateral
+			expect(res.events.CloseSwap.returnValues.userPayout).toEqNum(8.659e8);
+		});
+
 
 		it('should close late rec fixed swap without underflowing if very late, user payout is 0', async () => {
 			await setup(swapFixedRate);
@@ -732,8 +771,10 @@ describe('Protocol Unit Tests', () => {
 			// fixedLeg >> floatLeg
 			await send(rho, 'advanceBlocksProtocol', [actualDuration.mul(100)]);
 
+			// full penalty
 			const res = await send(rho, 'close', closeArgs);
-			expect(res.events.CloseSwap.returnValues.userPayout).toEqNum(bal);
+			expect(res.events.CloseSwap.returnValues.userPayout).toEqNum(0);
+			expect(res.events.CloseSwap.returnValues.penalty).toEqNum(bal);
 		});
 
 		// open swap, open second at end of first, close first.

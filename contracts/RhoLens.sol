@@ -35,7 +35,7 @@ contract RhoLensV1 is Math {
 			userCollateral = rho.getReceiveFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate);
 			lockedCollateralHypothetical = _add(lockedCollateral, rho.getPayFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
 		}
-		if(_lt(supplierLiquidity, lockedCollateralHypothetical)) {
+		if (supplierLiquidity.val < lockedCollateralHypothetical.val) {
 			protocolIsCollateralized = false;
 		}
 		return (swapFixedRate.mantissa, userCollateral.val, toUnderlying(userCollateral.val), protocolIsCollateralized);

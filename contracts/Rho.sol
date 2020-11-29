@@ -15,6 +15,8 @@ contract Rho is RhoInterface, Math {
 	uint public immutable SWAP_MIN_DURATION;
 	uint public immutable SUPPLY_MIN_DURATION;
 	uint public immutable MIN_SWAP_NOTIONAL = 1e18;
+	uint public immutable CLOSE_GRACE_PERIOD_BLOCKS = 3000; // ~12.5 hrs
+	uint public immutable CLOSE_PENALTY_PER_BLOCK_MANTISSA = 1e14;// 1% (1e16) every 25 min (100 blocks)
 
 	constructor (
 		InterestRateModelInterface interestRateModel_,
@@ -56,13 +58,13 @@ contract Rho is RhoInterface, Math {
 
 		Exp memory cTokenExchangeRate = getExchangeRate();
 		accrue(cTokenExchangeRate);
-		uint prevIndex = supplyAccounts[msg.sender].index;
 		CTokenAmount memory prevSupply = supplyAccounts[msg.sender].amount;
 
 		CTokenAmount memory truedUpPrevSupply;
 		if (prevSupply.val == 0) {
 			truedUpPrevSupply = CTokenAmount({val: 0});
 		} else {
+			uint prevIndex = supplyAccounts[msg.sender].index;
 			truedUpPrevSupply = _div(_mul(prevSupply, supplyIndex), prevIndex);
 		}
 
@@ -228,6 +230,7 @@ contract Rho is RhoInterface, Math {
 
 	/* @dev Closes an existing swap, after the min swap duration. Float payment continues even if closed late.
 	 * Takes params from Open event.
+	 * Take caution not to unecessarily revert due to underflow / overflow, as uncloseable swaps are very dangerous.
 	 */
 	function close(
 		bool userPayingFixed,
@@ -278,13 +281,26 @@ contract Rho is RhoInterface, Math {
 			);
 		}
 		uint bal = cToken.balanceOf(address(this));
-		if (userPayout.val > bal) {
-			userPayout = CTokenAmount({val: bal});
+
+		// Payout is capped by total balance
+		if (userPayout.val > bal) userPayout = CTokenAmount({val: bal});
+
+		uint lateBlocks = _sub(swapDuration, SWAP_MIN_DURATION);
+		CTokenAmount memory penalty = CTokenAmount(0);
+
+		if (lateBlocks > CLOSE_GRACE_PERIOD_BLOCKS) {
+			uint penaltyBlocks = lateBlocks - CLOSE_GRACE_PERIOD_BLOCKS;
+			Exp memory penaltyPercent = _mul(_toExp(CLOSE_PENALTY_PER_BLOCK_MANTISSA), penaltyBlocks);
+			penaltyPercent = ONE_EXP.mantissa > penaltyPercent.mantissa ? penaltyPercent : ONE_EXP; // maximum of 100% penalty
+			penalty = CTokenAmount(_mul(userPayout.val, penaltyPercent));
+			userPayout = _sub(userPayout, penalty);
 		}
 
-		emit CloseSwap(swapHash, owner, userPayout.val, benchmarkIndexStored.mantissa);
+		emit CloseSwap(swapHash, owner, userPayout.val, penalty.val, benchmarkIndexStored.mantissa);
+
 		swaps[swapHash] = false;
 		transferOut(owner, userPayout);
+		transferOut(msg.sender, penalty);
 	}
 
 	// @dev User paid fixed, protocol paid fixed
@@ -315,7 +331,7 @@ contract Rho is RhoInterface, Math {
 
 		CTokenAmount memory fixedLeg = toCTokens(_mul(_mul(notionalAmount, swapDuration), swapFixedRate), cTokenExchangeRate);
 		CTokenAmount memory floatLeg = toCTokens(_mul(notionalAmount, _sub(benchmarkIndexRatio, ONE_EXP)), cTokenExchangeRate);
-		userPayout = _subToZero(_add(userCollateral, floatLeg), fixedLeg);
+		userPayout = _subToZero(_add(userCollateral, floatLeg), fixedLeg); // no underflows
 
 		notionalReceivingFixed = notionalReceivingFixedNew;
 		notionalPayingFloat = notionalPayingFloatNew;
@@ -415,7 +431,9 @@ contract Rho is RhoInterface, Math {
 	}
 
 	function transferOut(address to, CTokenAmount memory cTokenAmount) internal {
-		require(cToken.transfer(to, cTokenAmount.val), "Transfer Out failed");
+		if (cTokenAmount.val > 0) {
+			require(cToken.transfer(to, cTokenAmount.val), "Transfer Out failed");
+		}
 	}
 
 	// ** PUBLIC PURE HELPERS ** //
