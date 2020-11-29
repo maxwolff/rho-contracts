@@ -4,6 +4,7 @@
 build
 .build/test.json
 .build/development.json
+.build/contracts.json
 networks/development.json
 yarn-error.log
 .solcache

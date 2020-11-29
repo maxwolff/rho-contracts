@@ -30,10 +30,10 @@ contract RhoLensV1 is Math {
 		CTokenAmount memory lockedCollateralHypothetical;
 		if (userPayingFixed) {
 			userCollateral = rho.getPayFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate);
-			lockedCollateralHypothetical = _add(lockedCollateral, rho.getReceiveFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
+			lockedCollateralHypothetical = add_(lockedCollateral, rho.getReceiveFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
 		} else {
 			userCollateral = rho.getReceiveFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate);
-			lockedCollateralHypothetical = _add(lockedCollateral, rho.getPayFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
+			lockedCollateralHypothetical = add_(lockedCollateral, rho.getPayFixedInitCollateral(swapFixedRate, notionalAmount, cTokenExchangeRate));
 		}
 		if (supplierLiquidity.val < lockedCollateralHypothetical.val) {
 			protocolIsCollateralized = false;
@@ -55,8 +55,8 @@ contract RhoLensV1 is Math {
 		uint accruedBlocks = rho.getBlockNumber() - rho.lastAccrualBlock();
 		(lockedCollateral,,) = rho.getLockedCollateral(accruedBlocks, cTokenExchangeRate);
 
-		Exp memory benchmarkIndexRatio = _div(rho.getBenchmarkIndex(), _toExp(rho.benchmarkIndexStored()));
-		Exp memory floatRate = _sub(benchmarkIndexRatio, ONE_EXP);
+		Exp memory benchmarkIndexRatio = div_(rho.getBenchmarkIndex(), toExp_(rho.benchmarkIndexStored()));
+		Exp memory floatRate = sub_(benchmarkIndexRatio, ONE_EXP);
 
 		supplierLiquidity = rho.getSupplierLiquidity(accruedBlocks, floatRate, cTokenExchangeRate);
 	}
