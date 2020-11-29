@@ -19,6 +19,14 @@ Deploy locally:
 * `script/chain`
 * `script/deploy development`
 
+Deploy elsewhere: 
+* `script/deploy development`
+or 
+* `yarn console -n kovan` via saddle console
+* `.deploy RhoLensV1 0x123`
+* `await rhoLensV1.methods.rho().call();`
+* `await rho.methods.supplierLiquidity().call();`
+
 Resources:
 * [Spreadsheet](https://docs.google.com/spreadsheets/d/1w2EEdeKWvx7haG0p8vp5h9kBmOGBXVOpb6UTZOOV1io/edit#gid=27052314)
 * [Model](https://observablehq.com/d/d04daaa430a6de46)

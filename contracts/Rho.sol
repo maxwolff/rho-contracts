@@ -2,7 +2,7 @@ pragma experimental ABIEncoderV2;
 pragma solidity ^0.6.10;
 
 import "./Math.sol";
-import {RhoInterface, CTokenInterface, ERC20Interface, InterestRateModelInterface} from "./RhoInterfaces.sol";
+import {RhoInterface, CTokenInterface, CompInterface, InterestRateModelInterface} from "./RhoInterfaces.sol";
 
 /* @dev:
  * CTokens are used as collateral. "Underlying" in Rho refers to the collateral CToken's underlying token.
@@ -10,7 +10,7 @@ import {RhoInterface, CTokenInterface, ERC20Interface, InterestRateModelInterfac
 contract Rho is RhoInterface, Math {
 
 	CTokenInterface public immutable cToken;
-	ERC20Interface public immutable comp;
+	CompInterface public immutable comp;
 
 	uint public immutable SWAP_MIN_DURATION;
 	uint public immutable SUPPLY_MIN_DURATION;
@@ -21,7 +21,7 @@ contract Rho is RhoInterface, Math {
 	constructor (
 		InterestRateModelInterface interestRateModel_,
 		CTokenInterface cToken_,
-		ERC20Interface comp_,
+		CompInterface comp_,
 		uint minFloatRateMantissa_,
 		uint maxFloatRateMantissa_,
 		uint swapMinDuration_,
@@ -580,6 +580,12 @@ contract Rho is RhoInterface, Math {
 		require(msg.sender == admin, "Must be admin to transfer comp");
 		emit CompTransferred(dest, amount);
 		comp.transfer(dest, amount);
+	}
+
+	function _delegateComp(address delegatee) external {
+		require(msg.sender == admin, "Must be admin to delegate comp");
+		emit CompDelegated(delegatee);
+		comp.delegate(delegatee);
 	}
 
 	function _changeAdmin(address admin_) external {

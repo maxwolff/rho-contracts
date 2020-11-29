@@ -19,6 +19,10 @@ interface ERC20Interface {
     function balanceOf(address who) external returns (uint);
 }
 
+interface CompInterface is ERC20Interface{
+	function delegate(address delegatee) external;
+}
+
 interface CTokenInterface is ERC20Interface {
 	function borrowIndex() external view returns (uint);
 	function accrualBlockNumber() external view returns(uint);
@@ -65,6 +69,7 @@ abstract contract RhoInterface is Types {
 	event SetPause(bool isPaused);
 	event AdminRenounced();
 	event CompTransferred(address dest, uint amount);
+	event CompDelegated(address delegatee);
 	event SetCollateralRequirements(uint minFloatRateMantissa, uint maxFloatRateMantissa);
 	event AdminChanged(address oldAdmin, address newAdmin);
 	event SetLiquidityLimit(uint limit);
