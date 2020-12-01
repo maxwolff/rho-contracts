@@ -10,8 +10,6 @@ const writeNetworkFile = async (network, value, dir) => {
 };
 
 const deployProtocol = async (conf, network) => {
-	const a1 = conf.admin || saddle.accounts[0];
-
 	let cToken;
 	let cTokenAddr;
 	if (network == 'development') {
@@ -29,7 +27,8 @@ const deployProtocol = async (conf, network) => {
 		conf.feeSensitivity,
 		conf.range
 	]))._address;
-	const rho = await deploy('Rho', [
+
+	const rhoArgs = [
 		modelAddr, 
 		cTokenAddr,
 		compAddr,
@@ -37,66 +36,72 @@ const deployProtocol = async (conf, network) => {
 		conf.maxFloatMantissaPerBlock,
 		conf.swapMinDuration,
 		conf.supplyMinDuration,
-		a1,
+		conf.admin,
 		conf.liquidityLimit
-	]);
+	];
+	const rho = await deploy('Rho', rhoArgs);
+	
+	console.log("rho args: ", rhoArgs);
 
 	const rhoLensAddr = conf.rhoLens || (await deploy('RhoLensV1', [rho._address]))._address;
 
 	if (network == 'development') {
-		await send(cToken, 'allocateTo', [a1, str(500e10)]);
-		await send(cToken, 'approve', [rho._address, str(500e10)], { from: a1 });
+		await send(cToken, 'allocateTo', [conf.admin, str(500e10)]);
+		await send(cToken, 'approve', [rho._address, str(500e10)], { from: conf.admin });
 		await send(cToken, 'setAccrualBlockNumber', [0]);
 	}
 
 	return {'cToken': cTokenAddr, comp: compAddr, 'rho': rho._address, model: modelAddr, rhoLens: rhoLensAddr};
 };
 
-const main = async () => {
-	const base = {
-		yOffset: str(2.5e10),
+const getConf = () => {
+	const mainnet = {
+		//IRM
+		yOffset: str(1.9e10),
 		slopeFactor: str(0.5e36),
-		range: str(2.5e10),
 		rateFactorSensitivity: str(1e15),
-		feeBase: str(2e9),
-		feeSensitivity: str(2e9),
+		feeBase: str(1e9),
+		feeSensitivity: str(1.5e9),
+		range: str(2.5e10),
 
 		minFloatMantissaPerBlock: str(0),
 		maxFloatMantissaPerBlock: str(1e11),
-		liquidityLimit: str(1e12)//MAX_UINT
+		liquidityLimit: str(1e12), // 10k ctokens
+		supplyMinDuration: str(5), // enough to prevent hijinks, too few to little for users to notice
+		swapMinDuration: str(45500), // 7 days in blocks
+		comp: "0xc00e94cb662c3520282e6f5717214004a7f26888", // mainnet comp
+		cToken: "0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643",// mainnet cdai
+		admin: "0x74dacD80d9B67912Cb957966465cCc81e62ccc4f",// mainnet admin
+		model: "0xc0D7e5fd51762E6A36aF925534C53EafD2789562"
 	};
-	const conf = {
-		mainnet: {
-			...base,
-			swapMinDuration: str(345600), // 60 days in blocks
-			supplyMinDuration: str(172800), // 60 days in blocks
-			comp: "0xc00e94cb662c3520282e6f5717214004a7f26888",
-			cToken: "0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643",// cdai
-		},
+
+	return {
+		mainnet,
 		development: {
-			...base,
+			...mainnet,
 			swapMinDuration: str(10),
-			supplyMinDuration: str(5),
 			initExchangeRate: str(2e8),
 			borrowRateMantissa: str(1e10),
 			comp: null,
-			cToken: null
+			cToken: null, 
+			admin: saddle.accounts[0]
 		},
 		kovan: {
-			...base,
+			...mainnet,
 			supplyMinDuration: str(5),
 			swapMinDuration: str(10),
+			liquidityLimit: str(1e10), // 100 ctokens
 			comp: "0x61460874a7196d6a22d1ee4922473664b3e95270",
 			cToken: "0xf0d0eb522cfa50b716b3b1604c4f0fa6f04376ad",
 			admin: "0xc5Ea8C731aA7dB66Ffa91532Ee48f68419B49b48",
-			
-			model: "0x822a9EB2322097399Deea71163515e84a3BDd2c4"
 		}
 	}
+}
 
+const main = async () => {
+	const conf = getConf();
 	const network = saddle.network_config.network;
 	assert(Object.keys(conf).includes(network), "Unsupported network");
-	console.log(conf[network])
 	const networkJson = await deployProtocol(conf[network], network);
 	console.log(networkJson)
 	await writeNetworkFile(network, networkJson, 'networks');

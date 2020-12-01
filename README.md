@@ -15,7 +15,7 @@ Run fork test:
 * script/forkChain
 * script/forkTest
 
-Deploy locally:
+Deploy locally (saddle only compatible w node 13):
 * `script/chain`
 * `script/deploy development`
 
@@ -26,6 +26,7 @@ or
 * `.deploy RhoLensV1 0x123`
 * `await rhoLensV1.methods.rho().call();`
 * `await rho.methods.supplierLiquidity().call();`
+* `await rho.methods._pause(true).send();`
 
 Resources:
 * [Spreadsheet](https://docs.google.com/spreadsheets/d/1w2EEdeKWvx7haG0p8vp5h9kBmOGBXVOpb6UTZOOV1io/edit#gid=27052314)

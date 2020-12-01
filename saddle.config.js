@@ -21,17 +21,17 @@ module.exports = {
       providers: [                                      // How to load provider (processed in order)
         {env: "PROVIDER"},                              // Try to load Http provider from `PROVIDER` env variable (e.g. env PROVIDER=http://...)
         {ganache: {
-          gasLimit: 20000000,
+          gasLimit: 2000000,
           gasPrice: 20000,
           defaultBalanceEther: 1000000000,
-          allowUnlimitedContractSize: true,
+          // allowUnlimitedContractSize: true,
           hardfork: 'istanbul'
         }}
       ],
       web3: {                                           // Web3 options for immediate confirmation in development mode
         gas: [
           {env: "GAS"},
-          {default: "6700000"}
+          {default: "4000000"}
         ],
         gas_price: [
           {env: "GAS_PRICE"},
@@ -52,10 +52,10 @@ module.exports = {
         {env: "PROVIDER"},
         {
           ganache: {
-            gasLimit: 200000000,
+            gasLimit: 20000000,
             gasPrice: 20000,
             defaultBalanceEther: 1000000000,
-            allowUnlimitedContractSize: true,
+            // allowUnlimitedContractSize: true,
             hardfork: 'istanbul'
           }
         },                                  // In test mode, connect to a new ganache provider. Any options will be passed to ganache
@@ -63,7 +63,7 @@ module.exports = {
       web3: {
         gas: [
           {env: "GAS"},
-          {default: "20000000"}
+          {default: "4000000"}
         ],
         gas_price: [
           {env: "GAS_PRICE"},
@@ -102,6 +102,31 @@ module.exports = {
       accounts: [
         { env: "ACCOUNT" },
         { file: "~/.ethereum/kovan" }                   // Load from given file with contents as the private key (e.g. 0x...)
+      ]
+    },
+    mainnet: {
+      providers: [
+        { env: "PROVIDER" },
+        { file: "~/.ethereum/mainnet-url" },              // Load from given file with contents as the URL (e.g. https://infura.io/api-key)
+        { http: "https://mainnet-eth.compound.finance" }
+      ],
+      web3: {
+        gas: [
+          { env: "GAS" },
+          { default: "1200000" } // 4M
+        ],
+        gas_price: [
+          { env: "GAS_PRICE" },
+          { default: "55000000000" }
+        ],
+        options: {
+          transactionConfirmationBlocks: 1,
+          transactionBlockTimeout: 5
+        }
+      },
+      accounts: [
+        { env: "ACCOUNT" },
+        { file: "~/.ethereum/mainnet" }                   // Load from given file with contents as the private key (e.g. 0x...)
       ]
     },
   },
