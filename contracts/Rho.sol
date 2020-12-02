@@ -41,7 +41,6 @@ contract Rho is RhoInterface, Math {
 		admin = admin_;
 
 		supplyIndex = ONE_EXP.mantissa;
-		benchmarkIndexStored = toExp_(cToken_.borrowIndex());
 		isPaused = false;
 		liquidityLimit = CTokenAmount({val:liquidityLimitCTokens_});
 	}
@@ -394,7 +393,14 @@ contract Rho is RhoInterface, Math {
 		}
 
 		Exp memory benchmarkIndexNew = getBenchmarkIndex();
-		Exp memory benchmarkIndexRatio = div_(benchmarkIndexNew, benchmarkIndexStored);
+		Exp memory benchmarkIndexRatio;
+		
+		// if first tx
+		if (benchmarkIndexStored.mantissa == 0) {
+			benchmarkIndexRatio = ONE_EXP;
+		} else {
+			benchmarkIndexRatio = div_(benchmarkIndexNew, benchmarkIndexStored);
+		}
 		Exp memory floatRate = sub_(benchmarkIndexRatio, ONE_EXP);
 
 		CTokenAmount memory supplierLiquidityNew = getSupplierLiquidity(accruedBlocks, floatRate, cTokenExchangeRate);
