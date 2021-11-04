@@ -1,5 +1,7 @@
 # Rho
 
+[White paper](http://maxcwolff.com/pdf/rho.pdf)
+
 An AMM interest rate swap protocol deployed at Rho is deployed on mainnet at: [0xEC41a154386fe49aFa1339C5419eCB8f19a61294](https://etherscan.io/address/0xEC41a154386fe49aFa1339C5419eCB8f19a61294)
 * Uses CTokens as collateral, and for interest rates.
 * Capped downside for user, theoretically uncapped upside.
